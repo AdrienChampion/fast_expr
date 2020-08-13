@@ -89,6 +89,4 @@ fast_expr::expr! {
     }
 }
 
-fn main() {
-    println!("[example]: running")
-}
+fn main() {}

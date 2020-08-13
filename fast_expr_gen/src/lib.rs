@@ -5,3 +5,5 @@ pub extern crate syn;
 
 #[macro_use]
 pub mod macros;
+
+pub mod prelude;

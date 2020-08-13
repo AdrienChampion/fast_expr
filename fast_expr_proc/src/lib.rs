@@ -4,7 +4,7 @@ extern crate proc_macro;
 
 use fast_expr_gen::{log, logln};
 
-pub(crate) use fast_expr_gen::syn;
+pub(crate) use fast_expr_gen::{quote, syn};
 
 mod ast;
 
