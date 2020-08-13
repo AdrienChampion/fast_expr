@@ -1,0 +1,14 @@
+[package]
+name = "fast_expr_gen"
+version = "0.1.0"
+authors = ["Adrien Champion <adrien.champion@email.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+quote = "*"
+syn = { version = "*", features = [ "full" ] }
+
+[features]
+dbg_log = []
