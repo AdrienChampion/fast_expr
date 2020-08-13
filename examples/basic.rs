@@ -1,13 +1,17 @@
 /// Specification for boolean expressions.
 pub trait BoolSpec {
-    /// Type of boolean variables.
+    /// Boolean variables.
     type BVar;
-    /// Type of boolean constants.
+    /// Boolean constants.
     type BCst;
-    /// Type of boolean operators.
+    /// Boolean operators.
     type BOp;
-    /// Type of integer relations.
+    /// Integer relations.
     type IRel;
+    /// List relations.
+    type ListRel;
+    /// Bool list unary operators.
+    type ListUnOp;
 }
 
 /// Specification for integer expressions.
@@ -18,16 +22,34 @@ pub trait IntSpec {
     type ICst;
     /// Type of integer operators.
     type IOp;
+    /// Bool list unary operators.
+    type ListUnOp;
+}
+
+/// Specification for list expressions.
+pub trait ListSpec {
+    /// Type of list variables.
+    type LVar;
+    /// Type of list binary operators.
+    type LBinOp;
+    /// Type of list unary operators.
+    type LUnOp;
 }
 
 fast_expr::expr! {
     /// Top-level expression structure.
-    enum Expr<BSpec: BoolSpec, ISpec: IntSpec> {
+    enum Expr<BSpec: BoolSpec, ISpec: IntSpec, LSpec: ListSpec> {
         /// Boolean variant.
-        B(BExpr<_>),
+        B(BExpr),
 
         /// Integer variant.
-        I(IExpr<_>),
+        I(IExpr),
+
+        /// Bool list variant.
+        ListB(List<BExpr>),
+
+        /// Integer list variant.
+        ListI(List<IExpr>),
     }
 
     subs {
@@ -55,6 +77,13 @@ fast_expr::expr! {
                 /// Second operand.
                 rgt: IExpr,
             },
+            /// A unary predicate over lists of booleans.
+            BListUnApp {
+                /// Operator.
+                op: BSpec::ListUnOp,
+                /// Operand.
+                list: List<Self>,
+            }
         }
 
         /// Integer expressions.
@@ -85,6 +114,37 @@ fast_expr::expr! {
             CountTrue(
                 Vec<BExpr>,
             ),
+            /// A unary predicate over lists of booleans.
+            IListUnApp {
+                /// Operator.
+                op: ISpec::ListUnOp,
+                /// Operand.
+                list: List<Self>,
+            }
+        }
+
+        /// List expressions.
+        enum List<BSpec: BoolSpec, ISpec: IntSpec, LSpec: ListSpec, Expr> {
+            /// A list constant.
+            Cst(Vec<Expr>),
+            /// A list variable.
+            Var(LSpec::ListVar),
+            /// A list binary application.
+            BinApp {
+                /// Operator.
+                op: LSpec::BinOp,
+                /// First operand.
+                fst: Self,
+                /// Second operand.
+                snd: Self,
+            },
+            /// A list unary application.
+            UnApp {
+                /// Operator.
+                op: LSpec::UnOp,
+                /// Operand.
+                list: Self,
+            },
         }
     }
 }

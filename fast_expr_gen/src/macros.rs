@@ -8,6 +8,36 @@ macro_rules! prelude {
     };
 }
 
+/// Builds an error.
+#[macro_export]
+macro_rules! error {
+    (for($tokens:expr, $($msg:tt)*)) => {
+        crate::err::Error::new_spanned($tokens, format_args!($($msg)*))
+    };
+    (@($span:expr, $($msg:tt)*)) => {
+        crate::err::Error::new($span, format_args!($($msg)*))
+    };
+
+    ($unexpected:tt $def:tt) => {
+        compile_error!(concat!("expected `for` or `@`, found `", stringify!($unexpected), "`"))
+    };
+
+    ($kind:tt $def:tt $(, $tail_kind:tt $tail_def:tt)* $(,)?) => {{
+        let mut err = $crate::error!($kind $def);
+        $(
+            err.combine($crate::error!($tail_kind $tail_def));
+        )*
+        err
+    }};
+}
+/// Returns an error.
+#[macro_export]
+macro_rules! bail {
+    ($($stuff:tt)*) => {
+        return Err($crate::error!($($stuff)*))
+    };
+}
+
 /// Outputs something to `stdout` if the `log` feature is active
 #[cfg(any(test, feature = "dbg_log"))]
 #[macro_export]
@@ -34,6 +64,9 @@ macro_rules! log {
 #[cfg(any(test, feature = "dbg_log"))]
 #[macro_export]
 macro_rules! logln {
+    () => {
+        println!("[{}:{}]", file!(), line!())
+    };
     ($($stuff:tt)*) => {
         println!("[{}:{}] {}", file!(), line!(), format_args!($($stuff)*))
     };
@@ -42,6 +75,7 @@ macro_rules! logln {
 #[cfg(not(any(test, feature = "dbg_log")))]
 #[macro_export]
 macro_rules! logln {
+    () => {};
     ($($stuff:tt)*) => {
         debug_assert!({
             let _ = format!($($stuff)*);

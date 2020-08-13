@@ -1,6 +1,4 @@
-//! AST.
-
-use fast_expr_gen::syn;
+//! Frontend representation of an expression type and its sub-expressions.
 
 use syn::{
     parse::{Nothing, Parse, ParseStream, Result},
@@ -14,7 +12,7 @@ pub type List<T> = Punctuated<T, Nothing>;
 
 /// Keywords of the fast-expr DSL.
 pub mod keyword {
-    fast_expr_gen::syn::custom_keyword! {
+    syn::custom_keyword! {
         // Keyword indicating the list of sub-expression types.
         subs
     }

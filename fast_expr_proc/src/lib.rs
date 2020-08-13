@@ -2,22 +2,20 @@
 
 extern crate proc_macro;
 
-use fast_expr_gen::{log, logln};
+fast_expr_gen::prelude! {}
 
-pub(crate) use fast_expr_gen::{quote, syn};
-
-mod ast;
+use fast_expr_gen::{quote, syn};
 
 /// Entry point, parses a token stream and generates code.
 #[proc_macro]
 pub fn expr(stream: proc_macro::TokenStream) -> proc_macro::TokenStream {
     logln!("parsing...");
 
-    let _expr_def = syn::parse_macro_input!(stream as ast::Expr);
+    let expr_def = syn::parse_macro_input!(stream as front::Expr);
 
     log!({
-        logln!("done parsing, top expr is {} {{", _expr_def.top.ident);
-        for variant in &_expr_def.top.variants {
+        logln!("done parsing, top expr is {} {{", expr_def.top.ident);
+        for variant in &expr_def.top.variants {
             use syn::Fields::*;
             match &variant.fields {
                 Named(fields) => {
@@ -49,6 +47,11 @@ pub fn expr(stream: proc_macro::TokenStream) -> proc_macro::TokenStream {
                             use quote::ToTokens;
                             s.push_str(&field.ty.to_token_stream().to_string());
                         }
+                        let blah = match &field.ty {
+                            syn::Type::Path(path) => format!("{:?}", path),
+                            _ => "not a path".into(),
+                        };
+                        s.push_str(&format!(" ({})", blah));
                         s.push_str(", ");
                     }
                     s.push_str(")");
@@ -60,10 +63,21 @@ pub fn expr(stream: proc_macro::TokenStream) -> proc_macro::TokenStream {
         logln!("}}");
     });
 
-    logln!(
-        "building code-gen structures for `{}`...",
-        _expr_def.top.ident
-    );
+    logln!();
 
-    "".parse().unwrap()
+    match internal(expr_def) {
+        Ok(res) => res,
+        Err(e) => {
+            logln!("code generation failed...");
+            logln!();
+
+            proc_macro::TokenStream::from(e.to_compile_error())
+        }
+    }
+}
+
+fn internal(expr: front::Expr) -> Result<proc_macro::TokenStream> {
+    fast_expr_gen::generate_context(expr)?;
+
+    Ok("".parse().unwrap())
 }

@@ -12,7 +12,7 @@ lazy_static = "*"
 quote = "*"
 safe_index = "*"
 smallvec = "*"
-syn = { version = "*", features = [ "full" ] }
+syn = { version = "*", features = [ "full", "extra-traits" ] }
 
 [features]
 dbg_log = []

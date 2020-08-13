@@ -14,12 +14,13 @@ impl<T> AsPath for T where T: AsRef<std::path::Path> {}
 pub use either::Either;
 pub use lazy_static::lazy_static;
 pub use smallvec::smallvec;
+pub use syn::Error;
 
-// pub use crate::{
-//     api, core, cxt,
-//     err::{self, MultiRes, RawMultiRes, Res, ResExt, URes},
-//     expr, front, gen, rust,
-// };
+pub use crate::{
+    cxt,
+    err::{self, Result},
+    expr, front, log, logln, rust,
+};
 
 /// Used to indicate whether something was generated.
 pub type WasGenerated = bool;

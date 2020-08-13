@@ -2,6 +2,11 @@
 members = [
     "./fast_expr_gen",
     "./fast_expr_proc",
+    ".",
+]
+default-members = [
+    "./fast_expr_proc",
+    ".",
 ]
 
 [package]
