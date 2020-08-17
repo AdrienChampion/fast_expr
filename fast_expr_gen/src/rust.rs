@@ -2,16 +2,52 @@
 //!
 //! [`syn`]: https://docs.rs/syn (syn on crates.io)
 
-pub use syn::{Generics, Ident as Id, ItemEnum as Enum, Lifetime, Type as Typ};
+prelude! {}
 
-pub type TypParams = Vec<TypParam>;
+pub use proc_macro2::Span;
+pub use syn::{
+    Attribute, Field, GenericArgument as GenericArg, GenericParam, Generics, Ident as Id,
+    ItemEnum as Enum, ItemTrait as Trait, Lifetime, Path, Type as Typ, Variant,
+};
 
+// pub mod typ;
+
+pub struct Spanned<T> {
+    span: Span,
+    inner: T,
+}
+impl<T> Spanned<T> {
+    pub fn new(span: Span, inner: T) -> Self {
+        Self { span, inner }
+    }
+}
+
+pub type ETyp = Spanned<Option<ETypSpec>>;
+
+pub struct ETypSpec {
+    idx: idx::Expr,
+    args: GenericArgs,
+}
+
+/// A list of generic arguments.
+pub type GenericArgs = Vec<GenericArg>;
+
+/// A list of attributes.
+pub type Attributes = Vec<Attribute>;
+
+/// A list of type parameters.
+pub type TypParamDefs = Vec<TypParamDef>;
+
+/// A type parameter.
 #[derive(Debug, Clone)]
-pub enum TypParam {
+pub enum TypParamDef {
+    /// A lifetime identifier.
     Lifetime(Lifetime),
+    /// A type identifier.
     Typ(Id),
 }
 
+/// Snake-case identifiers.
 #[derive(Debug, Clone)]
 pub struct SnakeId {
     id: Id,
@@ -46,6 +82,7 @@ impl SnakeId {
     }
 }
 
+/// Camel-case identifier.
 #[derive(Debug, Clone)]
 pub struct CamelId {
     id: Id,
@@ -83,7 +120,7 @@ impl CamelId {
 }
 
 implement! {
-    impl TypParam {
+    impl TypParamDef {
         From<Lifetime> {
             |lt| Self::Lifetime(lt)
         }
@@ -192,5 +229,70 @@ impl CamelId {
                 }
             }
         }
+    }
+}
+
+pub mod typ {
+    use super::*;
+    use syn::punctuated::Punctuated;
+
+    fn new_segment(ident: Id, args: Option<GenericArgs>) -> syn::PathSegment {
+        let arguments = {
+            if let Some(gen_args) = args {
+                let mut args = Punctuated::new();
+                for arg in gen_args {
+                    args.push(arg)
+                }
+                syn::PathArguments::AngleBracketed(syn::AngleBracketedGenericArguments {
+                    colon2_token: None,
+                    lt_token: syn::token::Lt {
+                        spans: [Span::mixed_site()],
+                    },
+                    args,
+                    gt_token: syn::token::Gt {
+                        spans: [Span::mixed_site()],
+                    },
+                })
+            } else {
+                syn::PathArguments::None
+            }
+        };
+
+        syn::PathSegment { ident, arguments }
+    }
+
+    fn typ_from_segments(segments: Punctuated<syn::PathSegment, syn::token::Colon2>) -> Typ {
+        Typ::Path(syn::TypePath {
+            qself: None,
+            path: syn::Path {
+                leading_colon: None,
+                segments,
+            },
+        })
+    }
+
+    pub fn plain(ident: Id, args: Option<GenericArgs>) -> Typ {
+        let segments = {
+            let mut segments = Punctuated::new();
+            segments.push(new_segment(ident, args));
+            segments
+        };
+        typ_from_segments(segments)
+    }
+
+    pub fn simple_path(
+        path: impl Iterator<Item = Id>,
+        ident: Id,
+        args: Option<GenericArgs>,
+    ) -> Typ {
+        let segments = {
+            let mut segments = Punctuated::new();
+            for seg in path {
+                segments.push(new_segment(seg, None));
+            }
+            segments.push(new_segment(ident, args));
+            segments
+        };
+        typ_from_segments(segments)
     }
 }

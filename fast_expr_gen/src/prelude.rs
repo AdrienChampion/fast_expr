@@ -13,12 +13,13 @@ impl<T> AsPath for T where T: AsRef<std::path::Path> {}
 
 pub use either::Either;
 pub use lazy_static::lazy_static;
+pub use quote::ToTokens;
 pub use smallvec::smallvec;
 pub use syn::Error;
 
 pub use crate::{
-    cxt,
-    err::{self, Result},
+    check, cxt,
+    err::{self, Result as Res},
     expr, front, log, logln, rust,
 };
 

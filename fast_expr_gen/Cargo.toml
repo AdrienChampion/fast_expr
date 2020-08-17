@@ -9,6 +9,7 @@ edition = "2018"
 [dependencies]
 either = "*"
 lazy_static = "*"
+proc-macro2 = "*"
 quote = "*"
 safe_index = "*"
 smallvec = "*"

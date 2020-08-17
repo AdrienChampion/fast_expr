@@ -11,7 +11,7 @@ macro_rules! prelude {
 /// Builds an error.
 #[macro_export]
 macro_rules! error {
-    (for($tokens:expr, $($msg:tt)*)) => {
+    (on($tokens:expr, $($msg:tt)*)) => {
         crate::err::Error::new_spanned($tokens, format_args!($($msg)*))
     };
     (@($span:expr, $($msg:tt)*)) => {
@@ -65,10 +65,10 @@ macro_rules! log {
 #[macro_export]
 macro_rules! logln {
     () => {
-        println!("[{}:{}]", file!(), line!())
+        println!()
     };
     ($($stuff:tt)*) => {
-        println!("[{}:{}] {}", file!(), line!(), format_args!($($stuff)*))
+        println!("{}", format_args!($($stuff)*))
     };
 }
 /// Outputs something to `stdout` if the `log` feature is active

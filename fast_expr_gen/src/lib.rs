@@ -6,6 +6,7 @@ pub extern crate syn;
 #[macro_use]
 pub mod macros;
 
+pub mod check;
 pub mod cxt;
 pub mod err;
 pub mod expr;
@@ -15,6 +16,6 @@ pub mod rust;
 
 prelude! {}
 
-pub fn generate_context(expr: front::Expr) -> Result<cxt::Cxt> {
-    cxt::from_front(expr)
+pub fn generate_context(expr: front::Top) -> Res<cxt::Cxt> {
+    cxt::Cxt::new(expr)
 }

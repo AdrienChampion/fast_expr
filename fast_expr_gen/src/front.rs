@@ -1,47 +1,73 @@
 //! Frontend representation of an expression type and its sub-expressions.
 
-use syn::{
-    parse::{Nothing, Parse, ParseStream, Result},
-    punctuated::Punctuated,
-    token::Brace,
-    ItemEnum,
-};
+use syn::parse::{Parse, ParseStream};
 
-/// Type alias for a repetition of something separated by nothing.
-pub type List<T> = Punctuated<T, Nothing>;
+prelude! {}
 
 /// Keywords of the fast-expr DSL.
 pub mod keyword {
     syn::custom_keyword! {
-        // Keyword indicating the list of sub-expression types.
-        subs
+        // Keyword indicating the start of a spec trait.
+        spec
     }
 }
 
 /// Structure that comes out of the very first parsing step.
-pub struct Expr {
-    /// Top expression enumeration.
-    pub top: ItemEnum,
-    /// Brace span of the sub-expression block.
-    pub subs_brace: Brace,
-    /// Sub-expression types (enums).
-    pub subs: List<ItemEnum>,
+pub struct Top {
+    /// Specifications.
+    pub specs: Vec<rust::Trait>,
+    /// Expression types.
+    pub exprs: Vec<rust::Enum>,
 }
 
-impl Parse for Expr {
-    fn parse(input: ParseStream) -> Result<Self> {
-        let top = input.parse()?;
+impl Top {
+    /// Empty constructor.
+    fn new() -> Self {
+        Self {
+            specs: vec![],
+            exprs: vec![],
+        }
+    }
 
-        let _: keyword::subs = input.parse()?;
+    /// Parses a token stream.
+    fn from_stream(&mut self, input: ParseStream) -> Res<()> {
+        while !input.is_empty() {
+            // Not sure if we're parsing a spec or an expression, get the attributes first.
+            let mut attrs = input.call(rust::Attribute::parse_outer)?;
 
-        let def;
-        let subs_brace = syn::braced!(def in input);
-        let subs = def.parse_terminated(ItemEnum::parse)?;
+            // Now that we have the attributes, let's look ahead to decide what to parse.
+            let lookahead = input.lookahead1();
 
-        Ok(Self {
-            top,
-            subs_brace,
-            subs,
-        })
+            if lookahead.peek(keyword::spec) {
+                // Parsing a spec.
+                let _: keyword::spec = input.parse()?;
+                let mut spec: rust::Trait = input.parse()?;
+                // Put the attributes in there.
+                attrs = std::mem::replace(&mut spec.attrs, attrs);
+                spec.attrs.extend(attrs);
+                // Done, update `self`.
+                self.specs.push(spec)
+            } else if lookahead.peek(syn::Token![enum]) {
+                // Parsing an expression.
+                let mut expr: rust::Enum = input.parse()?;
+                // Put the attributes in there.
+                attrs = std::mem::replace(&mut expr.attrs, attrs);
+                expr.attrs.extend(attrs);
+                // Done, update `self`.
+                self.exprs.push(expr)
+            } else {
+                return Err(lookahead.error());
+            }
+        }
+
+        Ok(())
+    }
+}
+
+impl Parse for Top {
+    fn parse(input: ParseStream) -> Res<Self> {
+        let mut slf = Self::new();
+        slf.from_stream(input)?;
+        Ok(slf)
     }
 }
