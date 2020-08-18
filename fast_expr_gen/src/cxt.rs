@@ -22,7 +22,12 @@ impl Spec {
 
     #[inline]
     pub fn log(&self, _pref: impl Display + Copy) {
-        logln!("{}spec {} {:?}", _pref, self.id(), self.generics())
+        logln!(
+            "{}spec {} {}",
+            _pref,
+            self.id(),
+            self.generics().to_token_stream()
+        )
     }
 }
 
@@ -91,12 +96,6 @@ impl Cxt {
         }
         for expr in &exprs {
             let _ = slf.push_expr(expr.clone())?;
-        }
-
-        for expr in &slf.subs {
-            let e_idx = expr.e_idx();
-            let expr = expr::Expr::from_front(&slf, e_idx, &expr.def)?;
-            expr.log("");
         }
 
         Ok(slf)
@@ -212,10 +211,10 @@ impl ECxt {
             self.top_t_params
                 .iter()
                 .fold(String::new(), |acc, t| format!(
-                    "{}{}{:?},",
+                    "{}{}{},",
                     acc,
                     if acc.is_empty() { "" } else { " " },
-                    t
+                    t.to_token_stream(),
                 )),
         )
     }
@@ -225,6 +224,48 @@ implement! {
     impl Cxt {
         Index<idx::Expr, ECxt> {
             |self, idx| &self.subs[idx]
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Top {
+    pub cxt: Cxt,
+    pub exprs: idx::ExprMap<expr::Expr>,
+}
+impl Top {
+    pub fn new(top: front::Top) -> Res<Self> {
+        let cxt = Cxt::new(top)?;
+        let exprs = {
+            let mut exprs = idx::ExprMap::with_capacity(cxt.subs.len());
+            for expr in &cxt.subs {
+                let e_idx = expr.e_idx();
+                let expr = expr::Expr::from_front(&cxt, e_idx, &expr.def)?;
+                let _e_idx = exprs.push(expr);
+                debug_assert_eq!(e_idx, _e_idx)
+            }
+            exprs
+        };
+        Ok(Self { cxt, exprs })
+    }
+
+    pub fn log(&self, pref: &str) {
+        let sub_pref = &format!("{}    ", pref);
+        logln!("cxt {{");
+        self.cxt.log(sub_pref);
+        logln!("}}");
+        logln!("exprs {{");
+        for expr in &self.exprs {
+            expr.log(sub_pref);
+        }
+        logln!("}}");
+    }
+}
+
+impl ToTokens for Top {
+    fn to_tokens(&self, tokens: &mut TokenStream) {
+        for expr in &self.exprs {
+            expr.to_expr_enum_tokens(tokens)
         }
     }
 }

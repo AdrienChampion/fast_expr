@@ -53,10 +53,10 @@ fast_expr::expr! {
         I(IExpr<_>),
 
         /// Bool list variant.
-        ListB(List<BSpec, ISpec, LSpec, BExpr>),
+        ListB(List<LSpec, BExpr<BSpec, ISpec, LSpec>>),
 
         /// Integer list variant.
-        ListI(List<BSpec, ISpec, LSpec, IExpr>),
+        ListI(List<LSpec, IExpr<BSpec, ISpec, LSpec>>),
     }
 
     /// Boolean expressions.
@@ -70,7 +70,7 @@ fast_expr::expr! {
             /// Operator.
             op: BSpec::BOp,
             /// First operand.
-            head: Self,
+            head: wrap::Box<Self>,
             /// Tail of operands.
             tail: coll::Vec<Self>,
         },
@@ -79,9 +79,9 @@ fast_expr::expr! {
             /// Relation.
             irel: BSpec::IRel,
             /// First operand.
-            lft: IExpr<_>,
+            lft: wrap::Box<IExpr<_>>,
             /// Second operand.
-            rgt: IExpr<_>,
+            rgt: wrap::Box<IExpr<_>>,
         },
         /// A unary predicate over lists of booleans.
         BListUnApp {
@@ -103,7 +103,7 @@ fast_expr::expr! {
             /// Operator.
             op: ISpec::IOp,
             /// First operand.
-            head: Self,
+            head: wrap::Box<Self>,
             /// Second operand.
             tail: coll::Vec<Self>,
         },
@@ -112,9 +112,9 @@ fast_expr::expr! {
             /// Condition (boolean).
             cnd: BExpr<_>,
             /// Then-branch.
-            thn: Self,
+            thn: wrap::Box<Self>,
             /// Else-branch.
-            els: Self,
+            els: wrap::Box<Self>,
         },
         /// Counts the number of true sub-expressions.
         CountTrue(
@@ -137,24 +137,24 @@ fast_expr::expr! {
     /// List expressions.
     enum List<LDefaults> {
         /// A list *"constant"*.
-        Cst(Vec<Expr>),
+        Cst(coll::Vec<Expr>),
         /// A list variable.
-        Var(LSpec::ListVar),
+        Var(LSpec::LVar),
         /// A list binary application.
         BinApp {
             /// Operator.
-            op: LSpec::BinOp,
+            op: LSpec::LBinOp,
             /// First operand.
-            fst: Self,
+            fst: wrap::Box<Self>,
             /// Second operand.
-            snd: Self,
+            snd: wrap::Box<Self>,
         },
         /// A list unary application.
         UnApp {
             /// Operator.
-            op: LSpec::UnOp,
+            op: LSpec::LUnOp,
             /// Operand.
-            list: Self,
+            list: wrap::Box<Self>,
         },
     }
 }

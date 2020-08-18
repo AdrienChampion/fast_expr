@@ -7,13 +7,24 @@ pub mod variant;
 
 use self::{data::Data, variant::Variant};
 
+#[derive(Debug, Clone)]
 pub struct Expr {
     e_idx: idx::Expr,
+
+    generics: rust::Generics,
 
     variants: idx::VariantMap<Variant>,
     variant_map: Map<rust::Id, idx::Variant>,
 
     src: rust::Enum,
+}
+
+implement! {
+    impl Expr {
+        Index<idx::Variant, Variant> {
+            |self, v_idx| &self.variants[v_idx]
+        }
+    }
 }
 
 impl Expr {
@@ -44,6 +55,8 @@ impl Expr {
 
         Ok(Self {
             e_idx,
+
+            generics: cxt[e_idx].generics().clone(),
 
             variants,
             variant_map,
@@ -97,7 +110,12 @@ impl Expr {
     }
 
     pub fn log(&self, pref: &str) {
-        logln!("{}expr {}<...> {{", pref, self.id());
+        logln!(
+            "{}expr {}{} {{",
+            pref,
+            self.id(),
+            self.generics.to_token_stream()
+        );
         let sub_pref = &format!("{}    ", pref);
         for variant in &self.variants {
             variant.log(sub_pref, true)
@@ -106,10 +124,27 @@ impl Expr {
     }
 }
 
-implement! {
-    impl Expr {
-        Index<idx::Variant, Variant> {
-            |self, v_idx| &self.variants[v_idx]
+impl Expr {
+    pub fn to_expr_enum_tokens(&self, stream: &mut TokenStream) {
+        stream.append_all(&self.src.attrs);
+        self.src.vis.to_tokens(stream);
+        self.src.enum_token.to_tokens(stream);
+        self.src.ident.to_tokens(stream);
+        {
+            let (_, type_generics, where_clause) = self.generics.split_for_impl();
+            type_generics.to_tokens(stream);
+            where_clause.to_tokens(stream);
         }
+        self.src.brace_token.surround(stream, |stream| {
+            debug_assert_eq!(self.src.variants.len(), self.variants.len());
+            let mut v_idx = idx::Variant::zero();
+            gen::punct::do_with(&self.src.variants, |punct_opt| {
+                self.variants[v_idx].to_expr_variant_tokens(stream);
+                v_idx.inc();
+                if let Some(punct) = punct_opt {
+                    punct.to_tokens(stream)
+                }
+            })
+        })
     }
 }

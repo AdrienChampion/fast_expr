@@ -25,10 +25,9 @@ pub fn expr(stream: proc_macro::TokenStream) -> proc_macro::TokenStream {
 }
 
 fn internal(top: front::Top) -> Res<proc_macro::TokenStream> {
-    let _cxt = fast_expr_gen::generate_context(top)?;
-
-    // logln!("context:");
-    // _cxt.log("    ");
-
-    Ok("".parse().unwrap())
+    let top = fast_expr_gen::generate_context(top)?;
+    let tokens = quote!(#top);
+    logln!("done with codegen");
+    logln!("{}", tokens);
+    Ok(proc_macro::TokenStream::from(tokens))
 }

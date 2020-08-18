@@ -11,11 +11,15 @@ pub mod cxt;
 pub mod err;
 pub mod expr;
 pub mod front;
+pub mod gen;
 pub mod prelude;
 pub mod rust;
 
 prelude! {}
 
-pub fn generate_context(expr: front::Top) -> Res<cxt::Cxt> {
-    cxt::Cxt::new(expr)
+pub fn generate_context(top: front::Top) -> Res<cxt::Top> {
+    cxt::Top::new(top).map(|top| {
+        top.log("");
+        top
+    })
 }

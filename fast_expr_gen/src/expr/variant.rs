@@ -2,6 +2,7 @@
 
 prelude! {}
 
+#[derive(Debug, Clone)]
 pub struct Variant {
     e_idx: idx::Expr,
     v_idx: idx::Variant,
@@ -75,6 +76,47 @@ impl Variant {
         }
         if let Some(close) = close {
             logln!("{}{}{}", pref, close, if trailing_comma { "," } else { "" })
+        }
+    }
+}
+
+impl Variant {
+    fn fields_to_tokens(
+        &self,
+        stream: &mut TokenStream,
+        fields: &syn::punctuated::Punctuated<rust::Field, syn::token::Comma>,
+    ) {
+        debug_assert_eq!(fields.len(), self.data.len());
+        let mut d_idx = idx::Data::zero();
+        gen::punct::do_with(fields, |punct_opt| {
+            self.data[d_idx].to_expr_data_tokens(stream);
+            d_idx.inc();
+            if let Some(punct) = punct_opt {
+                punct.to_tokens(stream)
+            }
+        })
+    }
+
+    pub fn to_expr_variant_tokens(&self, stream: &mut TokenStream) {
+        stream.append_all(&self.src.attrs);
+        self.src.ident.to_tokens(stream);
+
+        logln!("generating {}", self.src.ident);
+
+        use syn::Fields::*;
+        match &self.src.fields {
+            Named(fields) => fields.brace_token.surround(stream, |stream| {
+                self.fields_to_tokens(stream, &fields.named)
+            }),
+            Unnamed(fields) => fields.paren_token.surround(stream, |stream| {
+                self.fields_to_tokens(stream, &fields.unnamed)
+            }),
+            Unit => (),
+        }
+
+        if let Some((eq_token, disc)) = &self.src.discriminant {
+            eq_token.to_tokens(stream);
+            disc.to_tokens(stream);
         }
     }
 }

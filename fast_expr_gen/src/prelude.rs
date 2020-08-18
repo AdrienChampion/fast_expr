@@ -13,14 +13,15 @@ impl<T> AsPath for T where T: AsRef<std::path::Path> {}
 
 pub use either::Either;
 pub use lazy_static::lazy_static;
-pub use quote::ToTokens;
+pub use proc_macro2::TokenStream;
+pub use quote::{quote, ToTokens, TokenStreamExt};
 pub use smallvec::smallvec;
 pub use syn::Error;
 
 pub use crate::{
     check, cxt,
     err::{self, Result as Res},
-    expr, front, log, logln, rust,
+    expr, front, gen, log, logln, rust,
 };
 
 /// Used to indicate whether something was generated.

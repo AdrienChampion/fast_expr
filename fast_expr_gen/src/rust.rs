@@ -2,32 +2,11 @@
 //!
 //! [`syn`]: https://docs.rs/syn (syn on crates.io)
 
-prelude! {}
-
 pub use proc_macro2::Span;
 pub use syn::{
     Attribute, Field, GenericArgument as GenericArg, GenericParam, Generics, Ident as Id,
     ItemEnum as Enum, ItemTrait as Trait, Lifetime, Path, Type as Typ, Variant,
 };
-
-// pub mod typ;
-
-pub struct Spanned<T> {
-    span: Span,
-    inner: T,
-}
-impl<T> Spanned<T> {
-    pub fn new(span: Span, inner: T) -> Self {
-        Self { span, inner }
-    }
-}
-
-pub type ETyp = Spanned<Option<ETypSpec>>;
-
-pub struct ETypSpec {
-    idx: idx::Expr,
-    args: GenericArgs,
-}
 
 /// A list of generic arguments.
 pub type GenericArgs = Vec<GenericArg>;

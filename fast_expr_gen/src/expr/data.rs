@@ -35,18 +35,30 @@ impl Data {
     pub fn id(&self) -> Option<&rust::Id> {
         self.src.ident.as_ref()
     }
-}
 
-impl DataExt for Data {
-    fn typ(&self) -> &rust::Typ {
+    pub fn typ(&self) -> &rust::Typ {
         self.data.typ()
     }
 }
 
-/// Trait providing type-derivation-related functionalities.
-pub trait DataExt {
-    /// Type of the data.
-    fn typ(&self) -> &rust::Typ;
+impl Data {
+    pub fn to_expr_data_tokens(&self, stream: &mut TokenStream) {
+        logln!("- {}", self);
+        stream.append_all(&self.src.attrs);
+        self.src.vis.to_tokens(stream);
+        if let Some(ident) = &self.src.ident {
+            ident.to_tokens(stream);
+            if let Some(token) = self.src.colon_token {
+                token.to_tokens(stream)
+            } else {
+                syn::token::Colon {
+                    spans: [rust::Span::mixed_site()],
+                }
+                .to_tokens(stream)
+            }
+        }
+        self.data.to_expr_data_tokens(stream);
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -55,12 +67,22 @@ pub enum DataTyp {
     One(One),
     Many(Many),
 }
-impl DataExt for DataTyp {
-    fn typ(&self) -> &rust::Typ {
+impl DataTyp {
+    pub fn typ(&self) -> &rust::Typ {
         match self {
             Self::Leaf(leaf) => leaf.typ(),
             Self::One(one) => one.typ(),
             Self::Many(many) => many.typ(),
+        }
+    }
+}
+
+impl DataTyp {
+    pub fn to_expr_data_tokens(&self, stream: &mut TokenStream) {
+        match self {
+            Self::Leaf(leaf) => leaf.typ().to_tokens(stream),
+            Self::One(one) => one.typ().to_tokens(stream),
+            Self::Many(many) => many.typ().to_tokens(stream),
         }
     }
 }
@@ -75,10 +97,8 @@ impl Leaf {
     pub fn new(typ: rust::Typ) -> Self {
         Self { typ }
     }
-}
 
-impl DataExt for Leaf {
-    fn typ(&self) -> &rust::Typ {
+    pub fn typ(&self) -> &rust::Typ {
         &self.typ
     }
 }
@@ -93,6 +113,7 @@ pub struct One {
     id: rust::Id,
     args: Option<rust::GenericArgs>,
     typ: rust::Typ,
+    wrap: Wrap,
 }
 impl One {
     /// Constructor.
@@ -101,6 +122,7 @@ impl One {
         v_idx: idx::Variant,
         d_idx: idx::Data,
         slf: rust::Id,
+        wrap: Wrap,
     ) -> Self {
         debug_assert_eq!(slf, "Self");
         let typ = rust::typ::plain(slf.clone(), None);
@@ -112,6 +134,7 @@ impl One {
             id: slf,
             args: None,
             typ,
+            wrap,
         }
     }
 
@@ -123,6 +146,7 @@ impl One {
         d_idx: idx::Data,
         inner: idx::Expr,
         args: rust::GenericArgs,
+        wrap: Wrap,
     ) -> Self {
         let id = cxt[inner].id().clone();
         let args = Some(args);
@@ -135,48 +159,12 @@ impl One {
             id,
             args,
             typ,
+            wrap,
         }
     }
-}
 
-impl DataExt for One {
-    fn typ(&self) -> &rust::Typ {
+    pub fn typ(&self) -> &rust::Typ {
         &self.typ
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
-pub enum Coll {
-    Vec,
-    HashSet,
-    BTreeSet,
-}
-impl Coll {
-    pub fn from_id(id: &rust::Id) -> Res<Self> {
-        if id == "Vec" {
-            Ok(Self::Vec)
-        } else if id == "HashSet" {
-            Ok(Self::HashSet)
-        } else if id == "BTreeSet" {
-            Ok(Self::BTreeSet)
-        } else {
-            bail!(on(id, "unknown collection type"))
-        }
-    }
-    pub fn to_path(self) -> (&'static [&'static str], &'static str) {
-        static COLL_PATH: [&'static str; 2] = ["std", "collections"];
-        const VEC: &'static str = "Vec";
-        const HASH_SET: &'static str = "HashSet";
-        const BTREE_SET: &'static str = "BTreeSet";
-
-        (
-            &COLL_PATH,
-            match self {
-                Self::Vec => VEC,
-                Self::HashSet => HASH_SET,
-                Self::BTreeSet => BTREE_SET,
-            },
-        )
     }
 }
 
@@ -201,11 +189,67 @@ impl Many {
             typ,
         }
     }
+
+    pub fn typ(&self) -> &rust::Typ {
+        &self.typ
+    }
 }
 
-impl DataExt for Many {
-    fn typ(&self) -> &rust::Typ {
-        &self.typ
+#[derive(Debug, Clone, Copy)]
+pub enum Coll {
+    Vec,
+    HashSet,
+    BTreeSet,
+}
+impl Coll {
+    pub const PREF: &'static str = "coll";
+    const COLL_PATH: [&'static str; 2] = ["std", "collection"];
+    const VEC_PATH: [&'static str; 2] = ["std", "vec"];
+    const VEC: &'static str = "Vec";
+    const HASH_SET: &'static str = "HashSet";
+    const BTREE_SET: &'static str = "BTreeSet";
+
+    pub fn from_id(id: &rust::Id) -> Res<Self> {
+        if id == Self::VEC {
+            Ok(Self::Vec)
+        } else if id == Self::HASH_SET {
+            Ok(Self::HashSet)
+        } else if id == Self::BTREE_SET {
+            Ok(Self::BTreeSet)
+        } else {
+            bail!(on(id, "unknown collection type"))
+        }
+    }
+    pub fn to_path(self) -> (&'static [&'static str], &'static str) {
+        match self {
+            Self::Vec => (&Self::VEC_PATH, Self::VEC),
+            Self::HashSet => (&Self::COLL_PATH, Self::HASH_SET),
+            Self::BTreeSet => (&Self::COLL_PATH, Self::BTREE_SET),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Wrap {
+    Plain,
+    Box,
+    Ref(rust::Lifetime),
+}
+impl Wrap {
+    pub const PREF: &'static str = "wrap";
+    const BOX_PREF: [&'static str; 2] = ["std", "boxed"];
+    const BOX: &'static str = "Box";
+
+    pub fn from_id(id: &rust::Id) -> Res<Self> {
+        if id == Self::BOX {
+            Ok(Wrap::Box)
+        } else {
+            bail!(on(id, "unknown wrapper type"))
+        }
+    }
+
+    pub fn is_plain(&self) -> bool {
+        *self == Self::Plain
     }
 }
 
@@ -322,10 +366,13 @@ pub mod front {
             e_idx: idx::Expr,
             v_idx: idx::Variant,
             d_idx: idx::Data,
+            wrap: Wrap,
         ) -> One {
             match self {
-                Rec::Slf(slf) => One::new_self(e_idx, v_idx, d_idx, slf),
-                Rec::Expr { e_idx: inner, args } => One::new(cxt, e_idx, v_idx, d_idx, inner, args),
+                Rec::Slf(slf) => One::new_self(e_idx, v_idx, d_idx, slf, wrap),
+                Rec::Expr { e_idx: inner, args } => {
+                    One::new(cxt, e_idx, v_idx, d_idx, inner, args, wrap)
+                }
             }
         }
     }
@@ -333,7 +380,7 @@ pub mod front {
     #[derive(Clone, Debug, PartialEq, Eq)]
     pub enum Resolved {
         None,
-        Plain(Rec),
+        Plain { wrap: Wrap, rec: Rec },
         Coll { coll: rust::Id, rec: Rec },
     }
     impl Resolved {
@@ -347,11 +394,11 @@ pub mod front {
         ) -> Res<DataTyp> {
             let res: DataTyp = match self {
                 Self::None => Leaf::new(typ.clone()).into(),
-                Self::Plain(rec) => rec.into_one(cxt, e_idx, v_idx, d_idx).into(),
+                Self::Plain { wrap, rec } => rec.into_one(cxt, e_idx, v_idx, d_idx, wrap).into(),
                 Self::Coll { coll, rec } => {
                     let coll_span = coll.span();
                     let coll = Coll::from_id(&coll)?;
-                    let inner = rec.into_one(cxt, e_idx, v_idx, d_idx);
+                    let inner = rec.into_one(cxt, e_idx, v_idx, d_idx, Wrap::Plain);
                     Many::new(coll_span, coll, inner).into()
                 }
             };
@@ -367,20 +414,26 @@ pub mod front {
                 if !segment.arguments.is_empty() {
                     bail!(on(&segment.arguments, "illegal arguments for `Self` type"))
                 }
-                Resolved::Plain(Rec::Slf(segment.ident.clone()))
+                Resolved::Plain {
+                    wrap: Wrap::Plain,
+                    rec: Rec::Slf(segment.ident.clone()),
+                }
             }
-            Some(segment) if segment.ident == "coll" => {
+
+            Some(segment) if segment.ident == Coll::PREF => {
                 if !segment.arguments.is_empty() {
                     bail!(on(
                         &segment.arguments,
-                        "`coll` path segment does not take arguments"
+                        "`{}` path segments does not take arguments",
+                        Coll::PREF
                     ))
                 }
 
                 let id_segment = segments.next().ok_or_else(|| {
                     error!(on(
                         &segment.ident,
-                        "expected collection type after this `coll` path segment"
+                        "expected collection type after this `{}` path segment",
+                        Coll::PREF
                     ))
                 })?;
 
@@ -402,7 +455,12 @@ pub mod front {
                     };
                     match (args.next(), args.next()) {
                         (Some(rust::GenericArg::Type(typ)), None) => match resolve_typ(cxt, typ)? {
-                            Resolved::Plain(rec) => rec,
+                            Resolved::Plain { wrap, rec } => {
+                                if !wrap.is_plain() {
+                                    bail!(on(typ, "illegal nesting of expression type wrappers"))
+                                }
+                                rec
+                            }
                             _ => bail!(on(
                                 &id_segment.arguments,
                                 "collections are only allowed to take a single expression type"
@@ -417,6 +475,63 @@ pub mod front {
 
                 Resolved::Coll { coll, rec }
             }
+
+            Some(segment) if segment.ident == Wrap::PREF => {
+                if !segment.arguments.is_empty() {
+                    bail!(on(
+                        &segment.arguments,
+                        "`{}` path segments does not take arguments",
+                        Wrap::PREF
+                    ))
+                }
+
+                let id_segment = segments.next().ok_or_else(|| {
+                    error!(on(
+                        &segment.ident,
+                        "expected wrapper type after this `{}` path segment",
+                        Wrap::PREF
+                    ))
+                })?;
+
+                let wrap = Wrap::from_id(&id_segment.ident)?;
+                let rec = {
+                    let mut args = {
+                        use syn::PathArguments::*;
+
+                        match &id_segment.arguments {
+                            AngleBracketed(args) => args.args.iter(),
+                            None => bail!(on(
+                                &id_segment.arguments,
+                                "wrappers are only allowed to take a single expression type"
+                            )),
+                            Parenthesized(paren) => {
+                                bail!(on(paren, "unexpected parenthesized arguments"))
+                            }
+                        }
+                    };
+                    match (args.next(), args.next()) {
+                        (Some(rust::GenericArg::Type(typ)), None) => match resolve_typ(cxt, typ)? {
+                            Resolved::Plain { wrap, rec } => {
+                                if !wrap.is_plain() {
+                                    bail!(on(typ, "illegal nesting of expression type wrappers"))
+                                }
+                                rec
+                            }
+                            _ => bail!(on(
+                                &id_segment.arguments,
+                                "wrappers are only allowed to take a single expression type"
+                            )),
+                        },
+                        _ => bail!(on(
+                            &id_segment.arguments,
+                            "wrappers only take a single argument"
+                        )),
+                    }
+                };
+
+                Resolved::Plain { wrap, rec }
+            }
+
             Some(segment) => {
                 if let Some(e_cxt) = cxt.get_expr(&segment.ident) {
                     use syn::PathArguments::*;
@@ -424,17 +539,23 @@ pub mod front {
                     let e_idx = e_cxt.e_idx();
 
                     match &segment.arguments {
-                        None => Resolved::Plain(Rec::Expr {
-                            e_idx,
-                            args: vec![],
-                        }),
+                        None => Resolved::Plain {
+                            wrap: Wrap::Plain,
+                            rec: Rec::Expr {
+                                e_idx,
+                                args: vec![],
+                            },
+                        },
                         AngleBracketed(args) => {
                             let args = if is_infer(args.args.iter()) {
                                 e_cxt.top_t_params().clone()
                             } else {
                                 args.args.iter().cloned().collect()
                             };
-                            Resolved::Plain(Rec::Expr { e_idx, args })
+                            Resolved::Plain {
+                                wrap: Wrap::Plain,
+                                rec: Rec::Expr { e_idx, args },
+                            }
                         }
                         Parenthesized(paren) => {
                             bail!(on(paren, "unexpected parenthesized arguments"))
