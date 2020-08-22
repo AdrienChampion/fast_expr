@@ -1,0 +1,3 @@
+//! Examples.
+
+pub mod test;

@@ -47,7 +47,7 @@ impl Top {
                 spec.attrs.extend(attrs);
                 // Done, update `self`.
                 self.specs.push(spec)
-            } else if lookahead.peek(syn::Token![enum]) {
+            } else if lookahead.peek(syn::Token![pub]) || lookahead.peek(syn::Token![enum]) {
                 // Parsing an expression.
                 let mut expr: rust::Enum = input.parse()?;
                 // Put the attributes in there.

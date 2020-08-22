@@ -124,6 +124,7 @@ impl Expr {
     }
 }
 
+/// # Main codegen functions.
 impl Expr {
     pub fn to_expr_enum_tokens(&self, stream: &mut TokenStream) {
         stream.append_all(&self.src.attrs);
@@ -146,5 +147,26 @@ impl Expr {
                 }
             })
         })
+    }
+
+    pub fn to_zip_tokens(&self, cxt: &cxt::Cxt, is_own: IsOwn) -> TokenStream {
+        let frame = self.to_frame_tokens(cxt, is_own);
+        quote! {
+            #frame
+        }
+    }
+}
+
+/// # Frame codegen functions.
+impl Expr {
+    pub fn to_frame_tokens(&self, cxt: &cxt::Cxt, is_own: IsOwn) -> TokenStream {
+        let e_cxt = &cxt[self.e_idx];
+
+        let frame_typ_id = e_cxt.frame_typ_id();
+        let (_, frame_generics, where_clause) = e_cxt.frame_generics(is_own).split_for_impl();
+
+        quote! {
+            pub trait #frame_typ_id #frame_generics #where_clause {}
+        }
     }
 }

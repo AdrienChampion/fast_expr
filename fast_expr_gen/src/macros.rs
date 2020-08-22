@@ -84,6 +84,20 @@ macro_rules! logln {
     };
 }
 
+/// Creates a [`StaticTypPath`].
+///
+/// [`StaticTypPath`]: prelude/struct.StaticTypPath.html
+#[macro_export]
+macro_rules! static_typ_path {
+    (
+        $($field:ident : $val:expr),* $(,)?
+    ) => {
+        $crate::prelude::StaticTypPath {
+            $( $field: $val ),*
+        }
+    }
+}
+
 /// Convenience macro for implementing various traits.
 #[macro_export]
 macro_rules! implement {

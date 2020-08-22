@@ -138,3 +138,29 @@ pub mod idx {
         map: TopTParamMap with iter: TopTParamIter,
     }
 }
+
+pub type StaticPref = &'static [&'static str];
+pub type StaticTypId = &'static str;
+
+#[derive(Debug, Clone, Copy)]
+pub struct StaticTypPath {
+    pub pref: StaticPref,
+    pub id: StaticTypId,
+}
+impl StaticTypPath {
+    pub const fn new(pref: StaticPref, id: StaticTypId) -> Self {
+        Self { pref, id }
+    }
+    pub fn to_typ(&self, span: rust::Span, args: Option<rust::GenericArgs>) -> rust::Typ {
+        let pref = self.pref.iter().map(|id| rust::Id::new(id, span));
+        let id = rust::Id::new(self.id, span);
+        rust::typ::simple_path(pref, id, args)
+    }
+}
+implement! {
+    impl StaticTypPath {
+        From<(StaticPref, StaticTypId)> {
+            |pair| Self { pref: pair.0, id: pair.1 }
+        }
+    }
+}

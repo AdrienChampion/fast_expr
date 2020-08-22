@@ -4,6 +4,9 @@ prelude! {}
 
 use cxt::Cxt;
 
+pub mod many;
+pub mod one;
+
 /// Some variant data.
 #[derive(Debug, Clone)]
 pub struct Data {
@@ -39,6 +42,10 @@ impl Data {
     pub fn typ(&self) -> &rust::Typ {
         self.data.typ()
     }
+
+    pub fn map_rec_exprs(&self, action: impl FnMut(idx::Expr) -> Res<()>) -> Res<()> {
+        self.data.map_rec_exprs(action)
+    }
 }
 
 impl Data {
@@ -61,6 +68,12 @@ impl Data {
     }
 }
 
+impl Data {
+    pub fn to_frame_variant_fields_tokens(&self, cxt: &Cxt) -> TokenStream {
+        quote! {}
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum DataTyp {
     Leaf(Leaf),
@@ -73,6 +86,13 @@ impl DataTyp {
             Self::Leaf(leaf) => leaf.typ(),
             Self::One(one) => one.typ(),
             Self::Many(many) => many.typ(),
+        }
+    }
+    pub fn map_rec_exprs(&self, action: impl FnMut(idx::Expr) -> Res<()>) -> Res<()> {
+        match self {
+            Self::Leaf(leaf) => leaf.map_rec_exprs(action),
+            Self::One(one) => one.map_rec_exprs(action),
+            Self::Many(many) => many.map_rec_exprs(action),
         }
     }
 }
@@ -98,8 +118,17 @@ impl Leaf {
         Self { typ }
     }
 
+    pub fn map_rec_exprs(&self, _: impl FnMut(idx::Expr) -> Res<()>) -> Res<()> {
+        Ok(())
+    }
+}
+
+impl Leaf {
     pub fn typ(&self) -> &rust::Typ {
         &self.typ
+    }
+    pub fn der(&self, _is_own: IsOwn) -> Option<&rust::Typ> {
+        None
     }
 }
 
@@ -113,19 +142,27 @@ pub struct One {
     id: rust::Id,
     args: Option<rust::GenericArgs>,
     typ: rust::Typ,
-    wrap: Wrap,
+    e_typ: rust::Typ,
+    wrap: one::Wrap,
 }
 impl One {
     /// Constructor.
     pub fn new_self(
+        cxt: &Cxt,
         e_idx: idx::Expr,
         v_idx: idx::Variant,
         d_idx: idx::Data,
         slf: rust::Id,
-        wrap: Wrap,
+        wrap: one::Wrap,
     ) -> Self {
         debug_assert_eq!(slf, "Self");
-        let typ = rust::typ::plain(slf.clone(), None);
+        let args = Some(cxt[e_idx].top_t_params().clone());
+        let e_typ = {
+            let mut id = cxt[e_idx].id().clone();
+            id.set_span(slf.span());
+            rust::typ::plain(id, args.clone())
+        };
+        let typ = wrap.wrap(e_typ.clone());
         Self {
             e_idx,
             v_idx,
@@ -134,6 +171,7 @@ impl One {
             id: slf,
             args: None,
             typ,
+            e_typ,
             wrap,
         }
     }
@@ -146,11 +184,12 @@ impl One {
         d_idx: idx::Data,
         inner: idx::Expr,
         args: rust::GenericArgs,
-        wrap: Wrap,
+        wrap: one::Wrap,
     ) -> Self {
         let id = cxt[inner].id().clone();
         let args = Some(args);
-        let typ = rust::typ::plain(id.clone(), args.clone());
+        let e_typ = rust::typ::plain(id.clone(), args.clone());
+        let typ = wrap.wrap(e_typ.clone());
         Self {
             e_idx,
             v_idx,
@@ -159,29 +198,36 @@ impl One {
             id,
             args,
             typ,
+            e_typ,
             wrap,
         }
     }
 
+    pub fn map_rec_exprs(&self, mut action: impl FnMut(idx::Expr) -> Res<()>) -> Res<()> {
+        action(self.inner)
+    }
+}
+
+impl One {
     pub fn typ(&self) -> &rust::Typ {
         &self.typ
+    }
+    pub fn der(&self, _is_own: IsOwn) -> Option<&rust::Typ> {
+        None
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct Many {
     coll_span: rust::Span,
-    coll: Coll,
+    coll: many::Coll,
     inner: One,
     typ: rust::Typ,
+    // acc_t_param: rust::Id,
 }
 impl Many {
-    pub fn new(coll_span: rust::Span, coll: Coll, inner: One) -> Self {
-        let (path, id) = coll.to_path();
-        let path = path.iter().map(|id| rust::Id::new(id, coll_span));
-        let id = rust::Id::new(id, coll_span);
-        let args = vec![rust::GenericArg::Type(inner.typ().clone())];
-        let typ = rust::typ::simple_path(path, id, Some(args));
+    pub fn new(coll_span: rust::Span, coll: many::Coll, inner: One) -> Self {
+        let typ = coll.wrap(coll_span, inner.typ().clone());
         Self {
             coll_span,
             coll,
@@ -190,66 +236,17 @@ impl Many {
         }
     }
 
+    pub fn map_rec_exprs(&self, action: impl FnMut(idx::Expr) -> Res<()>) -> Res<()> {
+        self.inner.map_rec_exprs(action)
+    }
+}
+
+impl Many {
     pub fn typ(&self) -> &rust::Typ {
         &self.typ
     }
-}
-
-#[derive(Debug, Clone, Copy)]
-pub enum Coll {
-    Vec,
-    HashSet,
-    BTreeSet,
-}
-impl Coll {
-    pub const PREF: &'static str = "coll";
-    const COLL_PATH: [&'static str; 2] = ["std", "collection"];
-    const VEC_PATH: [&'static str; 2] = ["std", "vec"];
-    const VEC: &'static str = "Vec";
-    const HASH_SET: &'static str = "HashSet";
-    const BTREE_SET: &'static str = "BTreeSet";
-
-    pub fn from_id(id: &rust::Id) -> Res<Self> {
-        if id == Self::VEC {
-            Ok(Self::Vec)
-        } else if id == Self::HASH_SET {
-            Ok(Self::HashSet)
-        } else if id == Self::BTREE_SET {
-            Ok(Self::BTreeSet)
-        } else {
-            bail!(on(id, "unknown collection type"))
-        }
-    }
-    pub fn to_path(self) -> (&'static [&'static str], &'static str) {
-        match self {
-            Self::Vec => (&Self::VEC_PATH, Self::VEC),
-            Self::HashSet => (&Self::COLL_PATH, Self::HASH_SET),
-            Self::BTreeSet => (&Self::COLL_PATH, Self::BTREE_SET),
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Wrap {
-    Plain,
-    Box,
-    Ref(rust::Lifetime),
-}
-impl Wrap {
-    pub const PREF: &'static str = "wrap";
-    const BOX_PREF: [&'static str; 2] = ["std", "boxed"];
-    const BOX: &'static str = "Box";
-
-    pub fn from_id(id: &rust::Id) -> Res<Self> {
-        if id == Self::BOX {
-            Ok(Wrap::Box)
-        } else {
-            bail!(on(id, "unknown wrapper type"))
-        }
-    }
-
-    pub fn is_plain(&self) -> bool {
-        *self == Self::Plain
+    pub fn der(&self, is_own: IsOwn) -> Option<&rust::Typ> {
+        unimplemented!()
     }
 }
 
@@ -366,10 +363,10 @@ pub mod front {
             e_idx: idx::Expr,
             v_idx: idx::Variant,
             d_idx: idx::Data,
-            wrap: Wrap,
+            wrap: one::Wrap,
         ) -> One {
             match self {
-                Rec::Slf(slf) => One::new_self(e_idx, v_idx, d_idx, slf, wrap),
+                Rec::Slf(slf) => One::new_self(cxt, e_idx, v_idx, d_idx, slf, wrap),
                 Rec::Expr { e_idx: inner, args } => {
                     One::new(cxt, e_idx, v_idx, d_idx, inner, args, wrap)
                 }
@@ -377,10 +374,10 @@ pub mod front {
         }
     }
 
-    #[derive(Clone, Debug, PartialEq, Eq)]
+    #[derive(Clone, Debug)]
     pub enum Resolved {
         None,
-        Plain { wrap: Wrap, rec: Rec },
+        Plain { wrap: one::Wrap, rec: Rec },
         Coll { coll: rust::Id, rec: Rec },
     }
     impl Resolved {
@@ -397,12 +394,20 @@ pub mod front {
                 Self::Plain { wrap, rec } => rec.into_one(cxt, e_idx, v_idx, d_idx, wrap).into(),
                 Self::Coll { coll, rec } => {
                     let coll_span = coll.span();
-                    let coll = Coll::from_id(&coll)?;
-                    let inner = rec.into_one(cxt, e_idx, v_idx, d_idx, Wrap::Plain);
+                    let coll = many::Coll::from_id(&coll)?;
+                    let inner = rec.into_one(cxt, e_idx, v_idx, d_idx, one::Wrap::Plain);
                     Many::new(coll_span, coll, inner).into()
                 }
             };
             Ok(res)
+        }
+
+        pub fn is_none(&self) -> bool {
+            if let Self::None = self {
+                true
+            } else {
+                false
+            }
         }
     }
 
@@ -415,17 +420,17 @@ pub mod front {
                     bail!(on(&segment.arguments, "illegal arguments for `Self` type"))
                 }
                 Resolved::Plain {
-                    wrap: Wrap::Plain,
+                    wrap: one::Wrap::Plain,
                     rec: Rec::Slf(segment.ident.clone()),
                 }
             }
 
-            Some(segment) if segment.ident == Coll::PREF => {
+            Some(segment) if segment.ident == many::Coll::PREF => {
                 if !segment.arguments.is_empty() {
                     bail!(on(
                         &segment.arguments,
                         "`{}` path segments does not take arguments",
-                        Coll::PREF
+                        many::Coll::PREF
                     ))
                 }
 
@@ -433,7 +438,7 @@ pub mod front {
                     error!(on(
                         &segment.ident,
                         "expected collection type after this `{}` path segment",
-                        Coll::PREF
+                        many::Coll::PREF
                     ))
                 })?;
 
@@ -476,12 +481,12 @@ pub mod front {
                 Resolved::Coll { coll, rec }
             }
 
-            Some(segment) if segment.ident == Wrap::PREF => {
+            Some(segment) if segment.ident == one::Wrap::PREF => {
                 if !segment.arguments.is_empty() {
                     bail!(on(
                         &segment.arguments,
                         "`{}` path segments does not take arguments",
-                        Wrap::PREF
+                        one::Wrap::PREF
                     ))
                 }
 
@@ -489,11 +494,11 @@ pub mod front {
                     error!(on(
                         &segment.ident,
                         "expected wrapper type after this `{}` path segment",
-                        Wrap::PREF
+                        one::Wrap::PREF
                     ))
                 })?;
 
-                let wrap = Wrap::from_id(&id_segment.ident)?;
+                let wrap = one::Wrap::from_id(&id_segment.ident)?;
                 let rec = {
                     let mut args = {
                         use syn::PathArguments::*;
@@ -540,7 +545,7 @@ pub mod front {
 
                     match &segment.arguments {
                         None => Resolved::Plain {
-                            wrap: Wrap::Plain,
+                            wrap: one::Wrap::Plain,
                             rec: Rec::Expr {
                                 e_idx,
                                 args: vec![],
@@ -553,7 +558,7 @@ pub mod front {
                                 args.args.iter().cloned().collect()
                             };
                             Resolved::Plain {
-                                wrap: Wrap::Plain,
+                                wrap: one::Wrap::Plain,
                                 rec: Rec::Expr { e_idx, args },
                             }
                         }
@@ -591,7 +596,7 @@ pub mod front {
             }
         }
 
-        if res == Resolved::None {
+        if res.is_none() {
             if mentions_expr(cxt, typ)? {
                 bail!(on(typ, "illegal recursive type"))
             }

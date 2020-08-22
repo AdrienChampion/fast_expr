@@ -12,6 +12,14 @@ pub struct Variant {
     src: rust::Variant,
 }
 
+implement! {
+    impl Variant {
+        Index<idx::Data, expr::Data> {
+            |self, d_idx| &self.data[d_idx]
+        }
+    }
+}
+
 impl Variant {
     pub fn e_idx(&self) -> idx::Expr {
         self.e_idx
@@ -21,6 +29,9 @@ impl Variant {
     }
     pub fn id(&self) -> &rust::Id {
         &self.src.ident
+    }
+    pub fn data(&self) -> &idx::DataMap<expr::Data> {
+        &self.data
     }
 }
 
@@ -80,8 +91,9 @@ impl Variant {
     }
 }
 
+/// # Expr-enum codegen functions.
 impl Variant {
-    fn fields_to_tokens(
+    fn to_fields_tokens(
         &self,
         stream: &mut TokenStream,
         fields: &syn::punctuated::Punctuated<rust::Field, syn::token::Comma>,
@@ -106,10 +118,10 @@ impl Variant {
         use syn::Fields::*;
         match &self.src.fields {
             Named(fields) => fields.brace_token.surround(stream, |stream| {
-                self.fields_to_tokens(stream, &fields.named)
+                self.to_fields_tokens(stream, &fields.named)
             }),
             Unnamed(fields) => fields.paren_token.surround(stream, |stream| {
-                self.fields_to_tokens(stream, &fields.unnamed)
+                self.to_fields_tokens(stream, &fields.unnamed)
             }),
             Unit => (),
         }
@@ -121,10 +133,9 @@ impl Variant {
     }
 }
 
-implement! {
-    impl Variant {
-        Index<idx::Data, expr::Data> {
-            |self, d_idx| &self.data[d_idx]
-        }
+/// # Frame codegen functions.
+impl Variant {
+    pub fn to_frame_variant_tokens(&self, cxt: &cxt::Cxt) -> TokenStream {
+        quote! {}
     }
 }
