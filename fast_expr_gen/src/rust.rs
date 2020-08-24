@@ -2,10 +2,15 @@
 //!
 //! [`syn`]: https://docs.rs/syn (syn on crates.io)
 
+prelude! {}
+
+pub mod typ;
+
 pub use proc_macro2::Span;
 pub use syn::{
     Attribute, Field, GenericArgument as GenericArg, GenericParam, Generics, Ident as Id,
-    ItemEnum as Enum, ItemTrait as Trait, Lifetime, Path, Type as Typ, Variant,
+    ItemEnum as Enum, ItemTrait as Trait, Lifetime, Path, Type as Typ, TypeParam as TypParam,
+    Variant,
 };
 
 /// A list of generic arguments.
@@ -33,16 +38,16 @@ pub struct SnakeId {
 }
 impl SnakeId {
     /// Constructor.
-    pub fn new(id: Id) -> Self {
+    pub fn new(id: Id) -> Res<Self> {
         let res = Self { id };
-        res.check();
-        res
+        res.check()?;
+        Ok(res)
     }
 
     /// Turns the identifier in a camel-case identifier.
     ///
     /// The span of the resulting identifier is the same as `self`.
-    pub fn to_camel(&self) -> CamelId {
+    pub fn to_camel(&self) -> Res<CamelId> {
         let id = self.id.to_string();
         let mut res = String::with_capacity(id.len());
         let mut make_upp = true;
@@ -50,6 +55,7 @@ impl SnakeId {
             if char == '_' {
                 make_upp = true
             } else if make_upp {
+                make_upp = false;
                 for char in char.to_uppercase() {
                     res.push(char)
                 }
@@ -57,7 +63,7 @@ impl SnakeId {
                 res.push(char)
             }
         }
-        Id::new(&res, self.id.span()).into()
+        Id::new(&res, self.id.span()).try_into()
     }
 }
 
@@ -68,16 +74,16 @@ pub struct CamelId {
 }
 impl CamelId {
     /// Constructor.
-    pub fn new(id: Id) -> Self {
+    pub fn new(id: Id) -> Res<Self> {
         let res = Self { id };
-        res.check();
-        res
+        res.check()?;
+        Ok(res)
     }
 
     /// Turns the identifier in a snake-case identifier.
     ///
     /// The span of the resulting identifier is the same as `self`.
-    pub fn to_snake(&self) -> SnakeId {
+    pub fn to_snake(&self) -> Res<SnakeId> {
         let id = self.id.to_string();
         let mut res = String::with_capacity(id.len());
         let mut insert_us = false;
@@ -94,7 +100,7 @@ impl CamelId {
                 insert_us = true
             }
         }
-        Id::new(&res, self.id.span()).into()
+        Id::new(&res, self.id.span()).try_into()
     }
 }
 
@@ -109,41 +115,43 @@ implement! {
     }
 
     impl SnakeId {
-        From<Id> {
+        TryFrom<Id, err::Error> {
             |id| Self::new(id)
         }
-        From<CamelId> {
+        TryFrom<CamelId, err::Error> {
             |camel| camel.to_snake()
         }
         Deref<Id> {
             |self| &self.id
         }
+        Display {
+            |self, fmt| self.id.fmt(fmt)
+        }
     }
 
     impl CamelId {
-        From<Id> {
+        TryFrom<Id, err::Error> {
             |id| Self::new(id)
         }
-        From<SnakeId> {
+        TryFrom<SnakeId, err::Error> {
             |snake| snake.to_camel()
         }
         Deref<Id> {
             |self| &self.id
+        }
+        Display {
+            |self, fmt| self.id.fmt(fmt)
         }
     }
 }
 
 impl SnakeId {
     /// Checks that the identifier is indeed a snake-case identifier.
-    #[cfg(not(debug_assertions))]
-    pub fn check(&self) {}
-    /// Checks that the identifier is indeed a snake-case identifier.
-    #[cfg(debug_assertions)]
-    pub fn check(&self) {
+    pub fn check(&self) -> Res<()> {
         let id = self.id.to_string();
         macro_rules! fail {
             () => {
-                panic!("illegal snake-case identifier {:?}", id)
+                bail!(on(&self.id, "illegal snake-case identifier {:?}", id))
             };
         }
 
@@ -170,20 +178,18 @@ impl SnakeId {
                 }
             }
         }
+
+        Ok(())
     }
 }
 
 impl CamelId {
     /// Checks that the identifier is indeed a camel-case identifier.
-    #[cfg(not(debug_assertions))]
-    pub fn check(&self) {}
-    /// Checks that the identifier is indeed a camel-case identifier.
-    #[cfg(debug_assertions)]
-    pub fn check(&self) {
+    pub fn check(&self) -> Res<()> {
         let id = self.id.to_string();
         macro_rules! fail {
             () => {
-                panic!("illegal camel-case identifier {:?}", id)
+                bail!(on(&self.id, "illegal camel-case identifier {:?}", id))
             };
         }
 
@@ -208,70 +214,7 @@ impl CamelId {
                 }
             }
         }
-    }
-}
 
-pub mod typ {
-    use super::*;
-    use syn::punctuated::Punctuated;
-
-    fn new_segment(ident: Id, args: Option<GenericArgs>) -> syn::PathSegment {
-        let arguments = {
-            if let Some(gen_args) = args {
-                let mut args = Punctuated::new();
-                for arg in gen_args {
-                    args.push(arg)
-                }
-                syn::PathArguments::AngleBracketed(syn::AngleBracketedGenericArguments {
-                    colon2_token: None,
-                    lt_token: syn::token::Lt {
-                        spans: [Span::mixed_site()],
-                    },
-                    args,
-                    gt_token: syn::token::Gt {
-                        spans: [Span::mixed_site()],
-                    },
-                })
-            } else {
-                syn::PathArguments::None
-            }
-        };
-
-        syn::PathSegment { ident, arguments }
-    }
-
-    fn typ_from_segments(segments: Punctuated<syn::PathSegment, syn::token::Colon2>) -> Typ {
-        Typ::Path(syn::TypePath {
-            qself: None,
-            path: syn::Path {
-                leading_colon: None,
-                segments,
-            },
-        })
-    }
-
-    pub fn plain(ident: Id, args: Option<GenericArgs>) -> Typ {
-        let segments = {
-            let mut segments = Punctuated::new();
-            segments.push(new_segment(ident, args));
-            segments
-        };
-        typ_from_segments(segments)
-    }
-
-    pub fn simple_path(
-        path: impl Iterator<Item = Id>,
-        ident: Id,
-        args: Option<GenericArgs>,
-    ) -> Typ {
-        let segments = {
-            let mut segments = Punctuated::new();
-            for seg in path {
-                segments.push(new_segment(seg, None));
-            }
-            segments.push(new_segment(ident, args));
-            segments
-        };
-        typ_from_segments(segments)
+        Ok(())
     }
 }

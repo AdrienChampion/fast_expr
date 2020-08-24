@@ -2,13 +2,14 @@
 
 prelude! {}
 
+// use expr::frame::Frame;
+
 #[derive(Debug, Clone)]
 pub struct Variant {
     e_idx: idx::Expr,
     v_idx: idx::Variant,
 
     data: idx::DataMap<expr::Data>,
-
     src: rust::Variant,
 }
 
@@ -37,7 +38,7 @@ impl Variant {
 
 impl Variant {
     pub fn from_front(
-        cxt: &cxt::Cxt,
+        cxt: &mut cxt::PreCxt,
         e_idx: idx::Expr,
         v_idx: idx::Variant,
         variant: &rust::Variant,
@@ -74,6 +75,13 @@ impl Variant {
     pub fn is_struct_like(&self) -> Option<bool> {
         self.data.iter().next().map(|data| data.id().is_some())
     }
+
+    // pub fn frame_variants(&self) -> &idx::DataMap<Option<expr::Frame>> {
+    //     &self.frames
+    // }
+    // pub fn has_frame_variants(&self) -> bool {
+    //     self.frames.iter().any(Option::is_some)
+    // }
 
     pub fn log(&self, pref: &str, trailing_comma: bool) {
         let (open, close) = match self.is_struct_like() {
@@ -130,12 +138,5 @@ impl Variant {
             eq_token.to_tokens(stream);
             disc.to_tokens(stream);
         }
-    }
-}
-
-/// # Frame codegen functions.
-impl Variant {
-    pub fn to_frame_variant_tokens(&self, cxt: &cxt::Cxt) -> TokenStream {
-        quote! {}
     }
 }

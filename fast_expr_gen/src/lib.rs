@@ -17,9 +17,8 @@ pub mod rust;
 
 prelude! {}
 
-pub fn generate_context(top: front::Top) -> Res<cxt::Top> {
-    cxt::Top::new(top).map(|top| {
-        top.log("");
-        top
-    })
+pub fn generate_context(top: front::Top) -> Res<cxt::Top<cxt::with_frames::ECxt>> {
+    let top = cxt::Top::new(top)?;
+    let top = top.generate_frames();
+    Ok(top)
 }

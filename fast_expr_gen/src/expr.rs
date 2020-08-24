@@ -3,9 +3,16 @@
 prelude! {}
 
 pub mod data;
+// pub mod frame;
 pub mod variant;
 
-use self::{data::Data, variant::Variant};
+pub use self::{
+    data::Data,
+    // frame::Frame,
+    variant::Variant,
+};
+
+pub type Exprs = idx::ExprMap<Expr>;
 
 #[derive(Debug, Clone)]
 pub struct Expr {
@@ -28,8 +35,8 @@ implement! {
 }
 
 impl Expr {
-    pub fn from_front(cxt: &cxt::Cxt, e_idx: idx::Expr, src: &rust::Enum) -> Res<Self> {
-        let src = src.clone();
+    pub fn from_front(cxt: &mut cxt::PreCxt, e_idx: idx::Expr) -> Res<Self> {
+        let src = cxt[e_idx].def().clone();
         let mut variants = idx::VariantMap::<Variant>::with_capacity(src.variants.len());
         let mut variant_map = Map::new();
 
@@ -147,26 +154,5 @@ impl Expr {
                 }
             })
         })
-    }
-
-    pub fn to_zip_tokens(&self, cxt: &cxt::Cxt, is_own: IsOwn) -> TokenStream {
-        let frame = self.to_frame_tokens(cxt, is_own);
-        quote! {
-            #frame
-        }
-    }
-}
-
-/// # Frame codegen functions.
-impl Expr {
-    pub fn to_frame_tokens(&self, cxt: &cxt::Cxt, is_own: IsOwn) -> TokenStream {
-        let e_cxt = &cxt[self.e_idx];
-
-        let frame_typ_id = e_cxt.frame_typ_id();
-        let (_, frame_generics, where_clause) = e_cxt.frame_generics(is_own).split_for_impl();
-
-        quote! {
-            pub trait #frame_typ_id #frame_generics #where_clause {}
-        }
     }
 }

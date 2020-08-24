@@ -2,14 +2,21 @@
 
 prelude! {}
 
-use cxt::Cxt;
-
+pub mod leaf;
 pub mod many;
 pub mod one;
+
+pub use leaf::Leaf;
+pub use many::Many;
+pub use one::One;
 
 /// Some variant data.
 #[derive(Debug, Clone)]
 pub struct Data {
+    e_idx: idx::Expr,
+    v_idx: idx::Variant,
+    d_idx: idx::Data,
+
     data: DataTyp,
 
     src: rust::Field,
@@ -17,7 +24,7 @@ pub struct Data {
 
 impl Data {
     pub fn from_front(
-        cxt: &Cxt,
+        cxt: &mut cxt::PreCxt,
         e_idx: idx::Expr,
         v_idx: idx::Variant,
         d_idx: idx::Data,
@@ -26,10 +33,20 @@ impl Data {
         let src = field.clone();
         let typ = &field.ty;
 
-        let data_typ: DataTyp =
-            self::front::resolve_typ(cxt, typ)?.into_data_typ(cxt, e_idx, v_idx, d_idx, typ)?;
+        let data_typ: DataTyp = self::front::resolve_typ(cxt, typ)?.into_data_typ(
+            cxt,
+            e_idx,
+            v_idx,
+            d_idx,
+            src.ident.as_ref(),
+            typ,
+        )?;
 
         Ok(Self {
+            e_idx,
+            v_idx,
+            d_idx,
+
             data: data_typ.into(),
             src,
         })
@@ -39,11 +56,25 @@ impl Data {
         self.src.ident.as_ref()
     }
 
+    pub fn e_idx(&self) -> idx::Expr {
+        self.e_idx
+    }
+    pub fn v_idx(&self) -> idx::Variant {
+        self.v_idx
+    }
+    pub fn d_idx(&self) -> idx::Data {
+        self.d_idx
+    }
+
+    pub fn data(&self) -> &DataTyp {
+        &self.data
+    }
+
     pub fn typ(&self) -> &rust::Typ {
         self.data.typ()
     }
 
-    pub fn map_rec_exprs(&self, action: impl FnMut(idx::Expr) -> Res<()>) -> Res<()> {
+    pub fn map_rec_exprs(&self, action: impl FnMut(idx::Expr, IsColl) -> Res<()>) -> Res<()> {
         self.data.map_rec_exprs(action)
     }
 }
@@ -68,18 +99,22 @@ impl Data {
     }
 }
 
-impl Data {
-    pub fn to_frame_variant_fields_tokens(&self, cxt: &Cxt) -> TokenStream {
-        quote! {}
-    }
-}
-
 #[derive(Debug, Clone)]
 pub enum DataTyp {
     Leaf(Leaf),
     One(One),
     Many(Many),
 }
+impl DataTyp {
+    pub fn map_rec_exprs(&self, mut action: impl FnMut(idx::Expr, IsColl) -> Res<()>) -> Res<()> {
+        match self {
+            Self::Leaf(leaf) => leaf.map_rec_exprs(|idx| action(idx, false)),
+            Self::One(one) => one.map_rec_exprs(|idx| action(idx, false)),
+            Self::Many(many) => many.map_rec_exprs(|idx| action(idx, true)),
+        }
+    }
+}
+
 impl DataTyp {
     pub fn typ(&self) -> &rust::Typ {
         match self {
@@ -88,11 +123,34 @@ impl DataTyp {
             Self::Many(many) => many.typ(),
         }
     }
-    pub fn map_rec_exprs(&self, action: impl FnMut(idx::Expr) -> Res<()>) -> Res<()> {
+
+    pub fn needs_frame(&self) -> bool {
         match self {
-            Self::Leaf(leaf) => leaf.map_rec_exprs(action),
-            Self::One(one) => one.map_rec_exprs(action),
-            Self::Many(many) => many.map_rec_exprs(action),
+            Self::Leaf(leaf) => leaf.needs_frame(),
+            Self::One(one) => one.needs_frame(),
+            Self::Many(many) => many.needs_frame(),
+        }
+    }
+
+    pub fn frame_typ(&self, e_cxt: &cxt::pre::ECxt, is_own: IsOwn) -> rust::Typ {
+        match self {
+            Self::Leaf(leaf) => leaf.frame_typ(e_cxt, is_own),
+            Self::One(one) => one.frame_typ(e_cxt, is_own),
+            Self::Many(many) => many.frame_typ(e_cxt, is_own),
+        }
+    }
+    pub fn frame_der(&self, e_cxt: &cxt::pre::ECxt, is_own: IsOwn) -> Option<rust::Typ> {
+        match self {
+            Self::Leaf(leaf) => leaf.frame_der(e_cxt, is_own),
+            Self::One(one) => one.frame_der(e_cxt, is_own),
+            Self::Many(many) => many.frame_der(e_cxt, is_own),
+        }
+    }
+    pub fn frame_res(&self, e_cxt: &cxt::pre::ECxt, is_own: IsOwn) -> rust::Typ {
+        match self {
+            Self::Leaf(leaf) => leaf.frame_res(e_cxt, is_own),
+            Self::One(one) => one.frame_res(e_cxt, is_own),
+            Self::Many(many) => many.frame_res(e_cxt, is_own),
         }
     }
 }
@@ -107,149 +165,6 @@ impl DataTyp {
     }
 }
 
-/// A leaf is just some data of some type that's not a sub-expression type.
-#[derive(Debug, Clone)]
-pub struct Leaf {
-    typ: rust::Typ,
-}
-impl Leaf {
-    /// Constructor.
-    pub fn new(typ: rust::Typ) -> Self {
-        Self { typ }
-    }
-
-    pub fn map_rec_exprs(&self, _: impl FnMut(idx::Expr) -> Res<()>) -> Res<()> {
-        Ok(())
-    }
-}
-
-impl Leaf {
-    pub fn typ(&self) -> &rust::Typ {
-        &self.typ
-    }
-    pub fn der(&self, _is_own: IsOwn) -> Option<&rust::Typ> {
-        None
-    }
-}
-
-/// Represents a variant that stores one type of self-expression.
-#[derive(Debug, Clone)]
-pub struct One {
-    e_idx: idx::Expr,
-    v_idx: idx::Variant,
-    d_idx: idx::Data,
-    inner: idx::Expr,
-    id: rust::Id,
-    args: Option<rust::GenericArgs>,
-    typ: rust::Typ,
-    e_typ: rust::Typ,
-    wrap: one::Wrap,
-}
-impl One {
-    /// Constructor.
-    pub fn new_self(
-        cxt: &Cxt,
-        e_idx: idx::Expr,
-        v_idx: idx::Variant,
-        d_idx: idx::Data,
-        slf: rust::Id,
-        wrap: one::Wrap,
-    ) -> Self {
-        debug_assert_eq!(slf, "Self");
-        let args = Some(cxt[e_idx].top_t_params().clone());
-        let e_typ = {
-            let mut id = cxt[e_idx].id().clone();
-            id.set_span(slf.span());
-            rust::typ::plain(id, args.clone())
-        };
-        let typ = wrap.wrap(e_typ.clone());
-        Self {
-            e_idx,
-            v_idx,
-            d_idx,
-            inner: e_idx,
-            id: slf,
-            args: None,
-            typ,
-            e_typ,
-            wrap,
-        }
-    }
-
-    /// Constructor.
-    pub fn new(
-        cxt: &Cxt,
-        e_idx: idx::Expr,
-        v_idx: idx::Variant,
-        d_idx: idx::Data,
-        inner: idx::Expr,
-        args: rust::GenericArgs,
-        wrap: one::Wrap,
-    ) -> Self {
-        let id = cxt[inner].id().clone();
-        let args = Some(args);
-        let e_typ = rust::typ::plain(id.clone(), args.clone());
-        let typ = wrap.wrap(e_typ.clone());
-        Self {
-            e_idx,
-            v_idx,
-            d_idx,
-            inner,
-            id,
-            args,
-            typ,
-            e_typ,
-            wrap,
-        }
-    }
-
-    pub fn map_rec_exprs(&self, mut action: impl FnMut(idx::Expr) -> Res<()>) -> Res<()> {
-        action(self.inner)
-    }
-}
-
-impl One {
-    pub fn typ(&self) -> &rust::Typ {
-        &self.typ
-    }
-    pub fn der(&self, _is_own: IsOwn) -> Option<&rust::Typ> {
-        None
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct Many {
-    coll_span: rust::Span,
-    coll: many::Coll,
-    inner: One,
-    typ: rust::Typ,
-    // acc_t_param: rust::Id,
-}
-impl Many {
-    pub fn new(coll_span: rust::Span, coll: many::Coll, inner: One) -> Self {
-        let typ = coll.wrap(coll_span, inner.typ().clone());
-        Self {
-            coll_span,
-            coll,
-            inner,
-            typ,
-        }
-    }
-
-    pub fn map_rec_exprs(&self, action: impl FnMut(idx::Expr) -> Res<()>) -> Res<()> {
-        self.inner.map_rec_exprs(action)
-    }
-}
-
-impl Many {
-    pub fn typ(&self) -> &rust::Typ {
-        &self.typ
-    }
-    pub fn der(&self, is_own: IsOwn) -> Option<&rust::Typ> {
-        unimplemented!()
-    }
-}
-
 implement! {
     impl Data {
         Display {
@@ -259,6 +174,9 @@ implement! {
                 self.id().map(|id| format!("{}: ", id)).unwrap_or_else(String::new),
                 self.typ().to_token_stream()
             )
+        }
+        Deref<DataTyp> {
+            |self| &self.data
         }
     }
 
@@ -279,7 +197,7 @@ pub mod front {
     use super::*;
 
     /// True if the type mentions `Self` or an path-prefix-free expression id appearing in `cxt`.
-    pub fn mentions_expr(cxt: &Cxt, typ: &rust::Typ) -> Res<bool> {
+    pub fn mentions_expr(cxt: &cxt::PreCxt, typ: &rust::Typ) -> Res<bool> {
         let mut todo: Vec<Either<&rust::Typ, &syn::Path>> = vec![Either::Left(typ)];
 
         while let Some(typ_or_path) = todo.pop() {
@@ -359,7 +277,7 @@ pub mod front {
     impl Rec {
         pub fn into_one(
             self,
-            cxt: &Cxt,
+            cxt: &mut cxt::PreCxt,
             e_idx: idx::Expr,
             v_idx: idx::Variant,
             d_idx: idx::Data,
@@ -383,20 +301,26 @@ pub mod front {
     impl Resolved {
         pub fn into_data_typ(
             self,
-            cxt: &Cxt,
+            cxt: &mut cxt::PreCxt,
             e_idx: idx::Expr,
             v_idx: idx::Variant,
             d_idx: idx::Data,
+            d_id: Option<&rust::Id>,
             typ: &rust::Typ,
         ) -> Res<DataTyp> {
             let res: DataTyp = match self {
                 Self::None => Leaf::new(typ.clone()).into(),
-                Self::Plain { wrap, rec } => rec.into_one(cxt, e_idx, v_idx, d_idx, wrap).into(),
+                Self::Plain { wrap, rec } => {
+                    let one = rec.into_one(cxt, e_idx, v_idx, d_idx, wrap);
+                    cxt.register_expr_data(one.e_idx(), one.inner());
+                    one.into()
+                }
                 Self::Coll { coll, rec } => {
                     let coll_span = coll.span();
                     let coll = many::Coll::from_id(&coll)?;
-                    let inner = rec.into_one(cxt, e_idx, v_idx, d_idx, one::Wrap::Plain);
-                    Many::new(coll_span, coll, inner).into()
+                    let one = rec.into_one(cxt, e_idx, v_idx, d_idx, one::Wrap::Plain);
+                    let c_idx = cxt.register_expr_coll_data(e_idx, v_idx, d_idx, d_id, one.inner());
+                    Many::new(cxt, coll_span, coll, one, c_idx)?.into()
                 }
             };
             Ok(res)
@@ -411,7 +335,7 @@ pub mod front {
         }
     }
 
-    pub fn resolve_path(cxt: &Cxt, path: &rust::Path) -> Res<Resolved> {
+    pub fn resolve_path(cxt: &mut cxt::PreCxt, path: &rust::Path) -> Res<Resolved> {
         let mut segments = path.segments.iter();
 
         let res = match segments.next() {
@@ -576,7 +500,7 @@ pub mod front {
         Ok(res)
     }
 
-    pub fn resolve_typ(cxt: &Cxt, typ: &rust::Typ) -> Res<Resolved> {
+    pub fn resolve_typ(cxt: &mut cxt::PreCxt, typ: &rust::Typ) -> Res<Resolved> {
         let mut res = Resolved::None;
 
         {

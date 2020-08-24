@@ -2,6 +2,7 @@
 
 pub use std::{
     collections::{BTreeMap as Map, BTreeSet as Set},
+    convert::{TryFrom, TryInto},
     fmt::Display,
     io::Write,
     ops::Deref,
@@ -19,7 +20,8 @@ pub use smallvec::smallvec;
 pub use syn::Error;
 
 pub use crate::{
-    check, cxt,
+    check,
+    cxt::{self, Cxt},
     err::{self, Result as Res},
     expr, front, gen, log, logln, rust,
 };
@@ -29,6 +31,9 @@ pub type WasGenerated = bool;
 
 /// Used to distinguish between an owned and referenced value or type.
 pub type IsOwn = bool;
+
+/// Boolean indicating whether some data is a recursive collection.
+pub type IsColl = bool;
 
 /// Used to distinguish between tuple-like and struct-like variants.
 pub type IsTupleLike = bool;
@@ -48,51 +53,6 @@ implement! {
         }
     }
 }
-
-// pub trait WriteExt<'txt>: Sized {
-//     /// Writes itself into a formatter.
-//     fn write_fmt(&self, w: &mut std::fmt::Formatter, cxt: Option<&cxt::Cxt<'txt>>) -> URes;
-
-//     /// Writes itself into a writer.
-//     fn write(&self, w: &mut impl Write, cxt: &cxt::Cxt<'txt>) -> URes {
-//         write!(w, "{}", self.display(cxt))?;
-//         Ok(())
-//     }
-
-//     /// Turns itself into something that can be displayed.
-//     fn display<'me, 'cxt>(
-//         &'me self,
-//         cxt: &'cxt cxt::Cxt<'txt>,
-//     ) -> Pair<&'me Self, Option<&'cxt cxt::Cxt<'txt>>> {
-//         (self, Some(cxt)).into()
-//     }
-//     /// Turns itself into something that can be displayed in debug mode.
-//     fn debug<'me, 'cxt>(&'me self) -> Pair<&'me Self, Option<&'cxt cxt::Cxt<'txt>>> {
-//         (self, None).into()
-//     }
-//     fn display_or_debug<'me, 'cxt>(
-//         &'me self,
-//         cxt: Option<&'cxt cxt::Cxt<'txt>>,
-//     ) -> Pair<&'me Self, Option<&'cxt cxt::Cxt<'txt>>> {
-//         (self, cxt).into()
-//     }
-// }
-// implement! {
-//     impl('txt, T) Pair<&'_ T, Option<&'_ cxt::Cxt<'txt>>> {
-//         Display where (
-//             T: WriteExt<'txt>
-//         ) {
-//             |self, fmt| self.lft.write_fmt(fmt, self.rgt).map_err(|_| std::fmt::Error)
-//         }
-//     }
-//     impl('txt, T) Pair<&'_ T, &'_ cxt::Cxt<'txt>> {
-//         Display where (
-//             T: WriteExt<'txt>
-//         ) {
-//             |self, fmt| self.lft.write_fmt(fmt, Some(self.rgt)).map_err(|_| std::fmt::Error)
-//         }
-//     }
-// }
 
 /// Safe indices.
 pub mod idx {
@@ -115,6 +75,13 @@ pub mod idx {
         Expr,
         /// Map from expression indices to something.
         map: ExprMap with iter: ExprIter,
+    }
+
+    safe_index::new! {
+        /// Collection indices.
+        Coll,
+        /// Map from collection indices to something.
+        map: CollMap with iter: CollIter,
     }
 
     safe_index::new! {

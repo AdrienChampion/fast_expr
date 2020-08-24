@@ -132,32 +132,6 @@ macro_rules! implement {
 
     (
         @impl($slf_ty:ty, $($t_params:tt)*)
-        WriteExt<$txt_lt:lifetime> $(
-            where ( $($t_constraints:tt)* )
-        )? {
-            |$slf:ident, $fmt:ident, $cxt_opt:ident| $def:expr
-        }
-        $($tail:tt)*
-    ) => {
-        impl<$($t_params)*> $crate::prelude::WriteExt<$txt_lt> for $slf_ty
-        $(where $($t_constraints)*)? {
-            fn write_fmt(
-                &$slf,
-                $fmt: &mut std::fmt::Formatter,
-                $cxt_opt: Option<&cxt::Cxt<'txt>>,
-            ) -> $crate::prelude::URes {
-                $def;
-                Ok(())
-            }
-        }
-        $crate::implement! {
-            @impl($slf_ty, $($t_params)*)
-            $($tail)*
-        }
-    };
-
-    (
-        @impl($slf_ty:ty, $($t_params:tt)*)
         Display $(
             where ( $($t_constraints:tt)* )
         )? {
@@ -233,6 +207,28 @@ macro_rules! implement {
         impl<$($t_params)*> Into<$tgt_ty> for $slf_ty
         $(where $($t_constraints)*)? {
             fn into($slf) -> $tgt_ty {
+                $def
+            }
+        }
+        $crate::implement! {
+            @impl($slf_ty, $($t_params)*)
+            $($tail)*
+        }
+    };
+
+    (
+        @impl($slf_ty:ty, $($t_params:tt)*)
+        TryFrom<$src_ty:ty, $err_ty:ty> $(
+            where ( $($t_constraints:tt)* )
+        )? {
+            |$src:ident| $def:expr
+        }
+        $($tail:tt)*
+    ) => {
+        impl<$($t_params)*> std::convert::TryFrom<$src_ty> for $slf_ty
+        $(where $($t_constraints)*)? {
+            type Error = $err_ty;
+            fn try_from($src: $src_ty) -> Res<Self> {
                 $def
             }
         }

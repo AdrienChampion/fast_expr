@@ -46,7 +46,7 @@ static SLICE_PATH: [&'static str; 2] = ["std", "slice"];
 static VEC: CollSpec = coll_spec! {
     typ: (&VEC_PATH, "Vec"),
     ref_iter: (&SLICE_PATH, "Iter"),
-    own_iter: (&VEC_PATH, "Iter"),
+    own_iter: (&VEC_PATH, "IntoIter"),
 };
 static HASH_SET: CollSpec = coll_spec! {
     typ: (&COLL_PATH, "HashSet"),
@@ -91,5 +91,94 @@ impl Coll {
         self.spec()
             .typ()
             .to_typ(coll_span, Some(vec![rust::GenericArg::Type(inner)]))
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Many {
+    coll_span: rust::Span,
+    coll: Coll,
+    inner: super::One,
+    typ: rust::Typ,
+    c_idx: idx::Coll,
+}
+impl Many {
+    pub fn new(
+        _cxt: &cxt::PreCxt,
+        coll_span: rust::Span,
+        coll: Coll,
+        inner: super::One,
+        c_idx: idx::Coll,
+    ) -> Res<Self> {
+        if !inner.is_plain() {
+            bail!(@(coll_span, "only collections of plain (not wrapped) expressions are supported"))
+        }
+        let typ = coll.wrap(coll_span, inner.typ().clone());
+        Ok(Self {
+            coll_span,
+            coll,
+            inner,
+            typ,
+            c_idx,
+        })
+    }
+
+    pub fn map_rec_exprs(&self, action: impl FnMut(idx::Expr) -> Res<()>) -> Res<()> {
+        self.inner.map_rec_exprs(action)
+    }
+
+    pub fn inner(&self) -> idx::Expr {
+        self.inner.inner()
+    }
+    pub fn e_idx(&self) -> idx::Expr {
+        self.inner.e_idx()
+    }
+    pub fn v_idx(&self) -> idx::Variant {
+        self.inner.v_idx()
+    }
+    pub fn d_idx(&self) -> idx::Data {
+        self.inner.d_idx()
+    }
+
+    pub fn acc_t_param<'a>(&self, e_cxt: &'a cxt::pre::ECxt) -> &'a rust::Typ {
+        e_cxt.colls()[self.c_idx].acc_t_param()
+    }
+}
+
+impl Many {
+    pub fn typ(&self) -> &rust::Typ {
+        &self.typ
+    }
+
+    #[inline]
+    pub fn needs_frame(&self) -> bool {
+        true
+    }
+
+    pub fn frame_typ(&self, _e_cxt: &cxt::pre::ECxt, is_own: IsOwn) -> rust::Typ {
+        let typ = self.typ.clone();
+        if is_own {
+            typ
+        } else {
+            rust::typ::to_expr_ref(typ)
+        }
+    }
+    pub fn frame_der(&self, e_cxt: &cxt::pre::ECxt, is_own: IsOwn) -> Option<rust::Typ> {
+        let spec = self.coll.spec();
+        let acc = self.acc_t_param(e_cxt).clone();
+
+        let mut args = vec![];
+        if !is_own {
+            args.push(rust::typ::generic_arg::from_lifetime(gen::lifetime::expr()))
+        }
+        args.push(rust::typ::generic_arg::from_typ(self.inner.typ().clone()));
+
+        let iter = spec
+            .iter(is_own)
+            .to_typ(rust::Span::mixed_site(), Some(args));
+        Some(rust::typ::lib::coll_der(acc, iter))
+    }
+    pub fn frame_res(&self, e_cxt: &cxt::pre::ECxt, _is_own: IsOwn) -> rust::Typ {
+        self.acc_t_param(e_cxt).clone()
     }
 }
