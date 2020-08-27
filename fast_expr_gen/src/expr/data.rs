@@ -63,7 +63,7 @@ impl Data {
         })
     }
 
-    pub fn id(&self) -> Option<&rust::Id> {
+    pub fn d_id(&self) -> Option<&rust::Id> {
         self.src.ident.as_ref()
     }
 
@@ -169,8 +169,8 @@ impl Data {
                         panic!(
                             "trying to build a frame for an expression type with no frames \
                             {}::{}::{}",
-                            cxt[self.e_idx].id(),
-                            cxt[self.e_idx].expr()[self.v_idx].id(),
+                            cxt[self.e_idx].e_id(),
+                            cxt[self.e_idx].expr()[self.v_idx].v_id(),
                             cxt[self.e_idx].expr()[self.v_idx][self.d_idx].param_id(),
                         )
                     })
@@ -179,8 +179,8 @@ impl Data {
                         panic!(
                             "trying to build a frame for some expression data with no frames \
                             {}::{}::{}",
-                            cxt[self.e_idx].id(),
-                            cxt[self.e_idx].expr()[self.v_idx].id(),
+                            cxt[self.e_idx].e_id(),
+                            cxt[self.e_idx].expr()[self.v_idx].v_id(),
                             cxt[self.e_idx].expr()[self.v_idx][self.d_idx].param_id(),
                         )
                     });
@@ -211,8 +211,8 @@ impl Data {
                 // );
                 let blah = format!(
                     "{}::{}::{}",
-                    cxt[self.e_idx].id(),
-                    cxt[self.e_idx].expr()[self.v_idx].id(),
+                    cxt[self.e_idx].e_id(),
+                    cxt[self.e_idx].expr()[self.v_idx].v_id(),
                     cxt[self.e_idx].expr()[self.v_idx][self.d_idx].param_id(),
                 );
                 quote!(todo!(#blah))
@@ -261,7 +261,7 @@ impl Data {
             DataTyp::One(one) => {
                 debug_assert!(!one.is_self_rec());
 
-                let zip_fun = cxt[one.inner()].self_zip_fun_id();
+                let zip_fun = &cxt[one.inner()].self_ids().zip_fun;
                 let keep_going = keep_going();
 
                 let tokens = one.extract_expr(
@@ -325,7 +325,7 @@ impl Data {
                         }
                     )
                 } else {
-                    let zip_fun = cxt[many.inner()].self_zip_fun_id();
+                    let zip_fun = &cxt[many.inner()].self_ids().zip_fun;
                     let fold_to_down = {
                         let folder = &cxt[many.e_idx()].zipper_trait().coll_folders()[many.e_idx()]
                             [many.c_idx()];
@@ -451,7 +451,7 @@ implement! {
             |self, fmt| write!(
                 fmt,
                 "{}{}",
-                self.id().map(|id| format!("{}: ", id)).unwrap_or_else(String::new),
+                self.d_id().map(|id| format!("{}: ", id)).unwrap_or_else(String::new),
                 self.typ().to_token_stream()
             )
         }

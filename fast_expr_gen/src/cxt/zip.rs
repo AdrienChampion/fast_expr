@@ -28,19 +28,7 @@ pub struct ECxt {
     zip_struct: ZipStruct,
     zipper_trait: ZipperTrait,
 
-    /// Identifier of the zip function **for this expression type**.
-    self_zip_fun_id: rust::Id,
-    /// Identifier of the inspecter function **for this expression type**.
-    self_inspect_fun_id: rust::Id,
-    /// Identifier of the frame handling function **for this expression type**.
-    self_handle_frame_fun_id: rust::Id,
-    /// Identifier of the expression handling function **for this expression type**.
-    self_handle_expr_fun_id: rust::Id,
-
-    /// Identifier of the stack field **for this expression type**.
-    ///
-    /// None if the expression has no frames, *i.e.* it is not self-recursive.
-    self_stack_field_id: Option<rust::Id>,
+    ids: gen::ZipBoundIds,
 }
 implement! {
     impl ECxt {
@@ -58,52 +46,19 @@ impl ECxt {
             zipper_trait,
         }: Info,
     ) -> Self {
-        let e_id = cxt.id();
+        let ids = gen::ZipBoundIds::new(cxt.expr());
 
-        let self_zip_fun_id = gen::ZipIds::zip_fun(e_id);
-        let self_inspect_fun_id = gen::ZipIds::inspect_fun(e_id);
-        let self_handle_frame_fun_id = gen::ZipIds::handle_frame_fun(e_id);
-        let self_handle_expr_fun_id = gen::ZipIds::handle_expr_fun(e_id);
-
-        let self_stack_field_id = if cxt.expr().is_self_rec() {
-            Some(gen::ZipIds::stack_field(e_id))
-        } else {
-            None
-        };
         Self {
             cxt,
             zip_struct,
             zipper_trait,
 
-            self_zip_fun_id,
-            self_inspect_fun_id,
-            self_handle_frame_fun_id,
-            self_handle_expr_fun_id,
-
-            self_stack_field_id,
+            ids,
         }
     }
 
-    /// Identifier of the zip function **for this expression type**.
-    pub fn self_zip_fun_id(&self) -> &rust::Id {
-        &self.self_zip_fun_id
-    }
-    /// Identifier of the inspect function **for this expression type**.
-    pub fn self_inspect_fun_id(&self) -> &rust::Id {
-        &self.self_inspect_fun_id
-    }
-    /// Identifier of the frame handling function **for this expression type**.
-    pub fn self_handle_frame_fun_id(&self) -> &rust::Id {
-        &self.self_handle_frame_fun_id
-    }
-    /// Identifier of the expression handling function **for this expression type**.
-    pub fn self_handle_expr_fun_id(&self) -> &rust::Id {
-        &self.self_handle_expr_fun_id
-    }
-
-    /// Identifier of the zip function **for this expression type**.
-    pub fn self_stack_field(&self) -> Option<&rust::Id> {
-        self.self_stack_field_id.as_ref()
+    pub fn self_ids(&self) -> &gen::ZipBoundIds {
+        &self.ids
     }
 
     pub fn zip_struct(&self) -> &ZipStruct {
@@ -116,7 +71,7 @@ impl ECxt {
 
 impl ECxt {
     pub fn fun_inspect_self_def_tokens(&self, is_own: IsOwn) -> TokenStream {
-        let id = self.self_inspect_fun_id();
+        let id = &self.self_ids().inspect_fun;
         let expr_lt = if is_own {
             None
         } else {
@@ -170,7 +125,7 @@ impl ECxt {
     }
 
     pub fn to_zip_handler_fn_tokens(&self, cxt: &cxt::ZipCxt, is_own: IsOwn) -> TokenStream {
-        let fn_id = gen::fun::expr_handler(self.id());
+        let fn_id = &self.self_ids().handle_expr_fun;
         let expr_var = &cxt.zip_ids().expr_var;
         let expr_typ = self.plain_typ_for(is_own);
         let out_typ = self.zip_variant_handler_out_typ(is_own);
@@ -180,7 +135,7 @@ impl ECxt {
                 .to_variant_constructors_tokens()
                 .map(|(v_idx, constructor)| {
                     let variant_handler =
-                        gen::fun::variant_handler(self.id(), self.expr()[v_idx].id());
+                        gen::fun::variant_handler(self.e_id(), self.expr()[v_idx].v_id());
                     let params = self.expr().variants()[v_idx]
                         .data()
                         .iter()
@@ -203,7 +158,7 @@ impl ECxt {
 /// # Codegen for the actual `zip` function for this expression type
 impl ECxt {
     pub fn self_zip_fun_def_tokens(&self, cxt: &cxt::ZipCxt, is_own: IsOwn) -> TokenStream {
-        let zip_fun_id = self.self_zip_fun_id();
+        let zip_fun_id = &self.self_ids().zip_fun;
 
         let expr = &cxt.zip_ids().expr_var;
         let e_typ = self.plain_typ_for(is_own);
@@ -235,7 +190,7 @@ impl ECxt {
 
     /// Generates the whole body of the zip function for this expression type.
     fn zip_fun_def_body_tokens(&self, cxt: &cxt::ZipCxt) -> TokenStream {
-        if let Some(stack_field) = self.self_stack_field() {
+        if let Some(stack_field) = &self.self_ids().stack_field {
             let go_down_label = quote!('go_down);
 
             let depth = &cxt.zip_ids().depth_var;
@@ -261,9 +216,9 @@ impl ECxt {
             // stepper first inspects the expression, and then might be asked to do stuff as we handle
             // the expression variant in practice.
             let get_user_command = {
-                let inspect = &self.self_inspect_fun_id();
+                let inspect = &&self.self_ids().inspect_fun;
                 let down_and_then = gen::lib::zip_do::down_and_then();
-                let handle_expr = self.self_handle_expr_fun_id();
+                let handle_expr = &self.self_ids().handle_expr_fun;
 
                 quote! {
                     let #zip_do = self.#step_field.#inspect(#expr).#down_and_then(
@@ -385,7 +340,7 @@ impl ECxt {
                 }},
             );
 
-            let handle_expr = self.self_handle_expr_fun_id();
+            let handle_expr = &self.self_ids().handle_expr_fun;
 
             subst_loop(quote! {
                 match self.#handle_expr(#expr) {
@@ -473,7 +428,7 @@ impl ECxt {
             }},
         );
 
-        let handle_frame = self.self_handle_frame_fun_id();
+        let handle_frame = &self.self_ids().handle_frame_fun;
 
         go_up_loop(quote! {
             match self.#handle_frame(#res, #frame) {

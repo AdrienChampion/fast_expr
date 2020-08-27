@@ -93,7 +93,7 @@ impl PreCxt {
 
         let prev = self.expr_id_map.insert(expr.ident.clone(), e_idx);
         if let Some(prev_idx) = prev {
-            let first_ident = self[prev_idx].id();
+            let first_ident = self[prev_idx].e_id();
             bail!(
                 on(first_ident, "expression enum `{}` is defined multiple times", first_ident),
                 @(new_span, "redefined here")
@@ -153,7 +153,7 @@ impl PreCxt {
         let c_idx = self[e_idx].colls().next_index();
         let coll = CollCxt::new(
             e_idx,
-            self[e_idx].id(),
+            self[e_idx].e_id(),
             v_idx,
             self[e_idx].v_id(v_idx),
             d_idx,

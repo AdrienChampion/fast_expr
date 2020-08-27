@@ -31,7 +31,7 @@ impl Variant {
     pub fn v_idx(&self) -> idx::Variant {
         self.v_idx
     }
-    pub fn id(&self) -> &rust::Id {
+    pub fn v_id(&self) -> &rust::Id {
         &self.src.ident
     }
     pub fn data(&self) -> &idx::DataMap<expr::Data> {
@@ -73,8 +73,8 @@ impl Variant {
             }
         }
 
-        let zip_handler_id = gen::fun::variant_handler(cxt[e_idx].id(), &src.ident);
-        let zipper_go_up_id = gen::fun::go_up(cxt[e_idx].id(), &variant.ident);
+        let zip_handler_id = gen::fun::variant_handler(cxt[e_idx].e_id(), &src.ident);
+        let zipper_go_up_id = gen::fun::go_up(cxt[e_idx].e_id(), &variant.ident);
 
         Ok(Self {
             e_idx,
@@ -117,7 +117,7 @@ impl Variant {
             Some(true) => (Some(" {"), Some("}")),
             Some(false) => (Some(" ("), Some(")")),
         };
-        logln!("{}{}{}", pref, self.id(), open.unwrap_or(""));
+        logln!("{}{}{}", pref, self.v_id(), open.unwrap_or(""));
         for data in &self.data {
             logln!("{}    {},", pref, data)
         }
@@ -167,7 +167,7 @@ impl Variant {
     }
 
     pub fn to_constructor_tokens(&self) -> TokenStream {
-        let id = self.id();
+        let id = self.v_id();
         let data = self.data.iter().map(|data| data.param_id());
         if self.is_struct_like().unwrap_or(false) {
             quote! {

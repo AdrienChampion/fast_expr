@@ -17,40 +17,16 @@ pub fn lib_path() -> Id {
 pub mod fun {
     use super::*;
 
-    pub fn zip(id: &rust::Id) -> rust::Id {
-        let id = match rust::CamelId::try_from(id.clone()).and_then(|id| id.to_snake()) {
-            Ok(id) => format!("zip_{}", id),
-            Err(_) => format!("zip_{}", id),
-        };
-        Id::new(&id, span())
-    }
     pub fn go_up(e_id: &rust::Id, v_id: &rust::Id) -> rust::Id {
         let e_id = rust::try_snake_from(e_id);
         let v_id = rust::try_snake_from(v_id);
         let id = format!("go_up_{}_{}", e_id, v_id);
         Id::new(&id, span())
     }
-    pub fn inspect(id: &rust::Id) -> rust::Id {
-        let id = match rust::CamelId::try_from(id.clone()).and_then(|id| id.to_snake()) {
-            Ok(id) => format!("inspect_{}", id),
-            Err(_) => format!("inspect_{}", id),
-        };
-        Id::new(&id, span())
-    }
-    pub fn expr_handler(e_id: &rust::Id) -> rust::Id {
-        let e_id = rust::try_snake_from(e_id);
-        let id = format!("handle_{}", e_id);
-        Id::new(&id, span())
-    }
     pub fn variant_handler(e_id: &rust::Id, v_id: &rust::Id) -> rust::Id {
         let e_id = rust::try_snake_from(e_id);
         let v_id = rust::try_snake_from(v_id);
         let id = format!("handle_variant_{}_{}", e_id, v_id);
-        Id::new(&id, span())
-    }
-    pub fn frame_handler(e_id: &rust::Id) -> rust::Id {
-        let e_id = rust::try_snake_from(e_id);
-        let id = format!("handle_frame_{}", e_id);
         Id::new(&id, span())
     }
 
@@ -465,6 +441,45 @@ pub mod lib {
         pub fn handle_frame_fn() -> Id {
             Id::new("handle_frame", span())
         }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ZipBoundIds {
+    pub zip_fun: rust::Id,
+    pub inspect_fun: rust::Id,
+    pub handle_frame_fun: rust::Id,
+    pub handle_expr_fun: rust::Id,
+
+    pub stack_field: Option<rust::Id>,
+}
+impl ZipBoundIds {
+    pub fn new(expr: &expr::Expr) -> Self {
+        let e_id = expr.id();
+
+        let zip_fun = Self::gen(format!("zip_{}", rust::try_snake_from(e_id)));
+        let inspect_fun = Self::gen(format!("inspect_{}", rust::try_snake_from(e_id)));
+        let handle_frame_fun = Self::gen(format!("handle_frame_{}", rust::try_snake_from(e_id)));
+        let handle_expr_fun = Self::gen(format!("handle_{}", rust::try_snake_from(e_id)));
+
+        let stack_field = if expr.is_self_rec() {
+            Some(Self::gen(format!("stack_{}", rust::try_snake_from(e_id))))
+        } else {
+            None
+        };
+
+        Self {
+            zip_fun,
+            inspect_fun,
+            handle_frame_fun,
+            handle_expr_fun,
+
+            stack_field,
+        }
+    }
+
+    fn gen(s: impl AsRef<str>) -> rust::Id {
+        Id::new(s.as_ref(), span())
     }
 }
 

@@ -14,7 +14,7 @@ impl ZipField {
     pub fn new(e_cxt: &cxt::frames::ECxt) -> Option<Self> {
         e_cxt.frames().map(|frames| {
             let e_idx = e_cxt.e_idx();
-            let id = gen::ZipIds::stack_field(e_cxt.id());
+            let id = gen::ZipIds::stack_field(e_cxt.e_id());
 
             let own_typ = frames.plain_typ(true);
             let ref_typ = frames.plain_typ(false);
@@ -62,7 +62,7 @@ pub struct ZipStruct {
 impl ZipStruct {
     pub fn new(cxt: &cxt::FrameCxt, e_idx: idx::Expr) -> Self {
         let e_cxt = &cxt[e_idx];
-        let id = gen::typ::zip(e_cxt.id().clone());
+        let id = gen::typ::zip(e_cxt.e_id().clone());
 
         let stepper_t_param = gen::typ::param::step();
         let stepper_field_typ = stepper_t_param.clone();

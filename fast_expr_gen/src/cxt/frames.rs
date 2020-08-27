@@ -86,9 +86,9 @@ impl Frame {
         }
 
         let (e_idx, v_idx) = (pivot.e_idx(), pivot.v_idx());
-        let id = gen::frame::variant_id(e_cxt.v_id(v_idx), pivot_d_idx, pivot.id());
+        let id = gen::frame::variant_id(e_cxt.v_id(v_idx), pivot_d_idx, pivot.d_id());
 
-        let is_struct_like = pivot.id().is_some();
+        let is_struct_like = pivot.d_id().is_some();
         let mut own_fields = vec![];
         let mut ref_fields = vec![];
 
@@ -99,7 +99,7 @@ impl Frame {
             for (curr_d_idx, curr_data) in data.index_iter() {
                 macro_rules! push_fields {
                     (@ident_colon) => {{
-                        curr_data.id().map(|id|
+                        curr_data.d_id().map(|id|
                             (Some(id.clone()), Some(syn::token::Colon::default()))
                         ).unwrap_or((None, None))
                     }};
@@ -369,8 +369,7 @@ impl VFrames {
 
     pub fn to_zip_frame_handler_fn_tokens(&self, cxt: &cxt::ZipCxt, is_own: IsOwn) -> TokenStream {
         let e_cxt = &cxt[self.e_idx];
-        let id = e_cxt.id();
-        let id = gen::fun::frame_handler(id);
+        let id = &e_cxt.self_ids().handle_frame_fun;
         let frame_var = &cxt.zip_ids().frame_var;
         let frame_typ = e_cxt
             .frames()

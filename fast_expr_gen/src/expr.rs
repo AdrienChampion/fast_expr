@@ -39,15 +39,15 @@ impl Expr {
             let v_idx = variants.next_index();
             let variant = Variant::from_front(cxt, e_idx, v_idx, variant)?;
 
-            let prev = variant_map.insert(variant.id().clone(), v_idx);
+            let prev = variant_map.insert(variant.v_id().clone(), v_idx);
             if let Some(prev_idx) = prev {
                 bail!(
                     on(
-                        variants[prev_idx].id(),
+                        variants[prev_idx].v_id(),
                         "expression enum `{}` is defined multiple times",
-                        variant.id(),
+                        variant.v_id(),
                     ),
-                    on(variant.id(), "redefined here")
+                    on(variant.v_id(), "redefined here")
                 )
             }
 
@@ -97,15 +97,15 @@ impl Expr {
     pub fn push_variant(&mut self, variant: Variant) -> Res<idx::Variant> {
         let v_idx = self.variants.next_index();
 
-        let prev = self.variant_map.insert(variant.id().clone(), v_idx);
+        let prev = self.variant_map.insert(variant.v_id().clone(), v_idx);
         if let Some(prev_idx) = prev {
             bail!(
                 on(
-                    self[prev_idx].id(),
+                    self[prev_idx].v_id(),
                     "variant `{}` is defined multiple times",
-                    variant.id()
+                    variant.v_id()
                 ),
-                on(variant.id(), "re-defined here"),
+                on(variant.v_id(), "re-defined here"),
             )
         }
 

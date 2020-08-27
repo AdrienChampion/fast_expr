@@ -11,7 +11,7 @@ pub struct FnParam {
 impl FnParam {
     pub fn from_data(e_cxt: &cxt::frames::ECxt, data: &expr::Data) -> Self {
         let id = gen::fun::param::data_param(
-            data.id()
+            data.d_id()
                 .map(Either::Left)
                 .unwrap_or_else(|| Either::Right(data.d_idx())),
         );
@@ -131,7 +131,11 @@ impl CollFolder {
         let e_cxt = &cxt[e_idx];
         let expr = e_cxt.expr();
 
-        let id = gen::fun::folder(e_cxt.id(), expr[v_idx].id(), expr[v_idx][d_idx].param_id());
+        let id = gen::fun::folder(
+            e_cxt.e_id(),
+            expr[v_idx].v_id(),
+            expr[v_idx][d_idx].param_id(),
+        );
 
         let params = expr[v_idx]
             .data()
@@ -241,7 +245,11 @@ impl CollInitializer {
         let e_cxt = &cxt[e_idx];
         let expr = e_cxt.expr();
 
-        let id = gen::fun::initializer(e_cxt.id(), expr[v_idx].id(), expr[v_idx][d_idx].param_id());
+        let id = gen::fun::initializer(
+            e_cxt.e_id(),
+            expr[v_idx].v_id(),
+            expr[v_idx][d_idx].param_id(),
+        );
 
         let params = expr[v_idx]
             .data()

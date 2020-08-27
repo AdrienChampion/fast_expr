@@ -87,7 +87,7 @@ impl One {
         debug_assert_eq!(slf, "Self");
         let args = Some(cxt[e_idx].top_t_params().clone());
         let e_typ = {
-            let mut id = cxt[e_idx].id().clone();
+            let mut id = cxt[e_idx].e_id().clone();
             id.set_span(slf.span());
             rust::typ::plain(id, args.clone())
         };
@@ -117,7 +117,7 @@ impl One {
         args: rust::GenericArgs,
         wrap: Wrap,
     ) -> Self {
-        let id = cxt[inner].id().clone();
+        let id = cxt[inner].e_id().clone();
         let args = Some(args);
         let e_typ = rust::typ::plain(id.clone(), args.clone());
         let typ = wrap.wrap(e_typ.clone());

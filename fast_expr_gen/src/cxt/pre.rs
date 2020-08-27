@@ -201,7 +201,7 @@ impl ECxt {
 
     /// Plain type of the expression.
     pub fn plain_typ(&self) -> rust::Typ {
-        let id = self.id();
+        let id = self.e_id();
         let (_, params, _) = self.generics().split_for_impl();
         syn::parse_quote!(#id #params)
     }
@@ -215,7 +215,7 @@ impl ECxt {
     }
 
     /// Identifier accessor.
-    pub fn id(&self) -> &rust::Id {
+    pub fn e_id(&self) -> &rust::Id {
         &self.def.ident
     }
     /// Id of a variant.
@@ -271,7 +271,7 @@ impl ECxt {
             "{}expr({}) {}<{}>",
             _pref,
             self.e_idx(),
-            self.id(),
+            self.e_id(),
             self.top_t_params
                 .iter()
                 .fold(String::new(), |acc, t| format!(
