@@ -44,6 +44,9 @@ pub struct Cxt<ECxt> {
     /// Specification traits.
     specs: Map<rust::Id, Spec>,
 
+    /// Standard variables for the zipper structure.
+    zip_ids: gen::ZipIds,
+
     /// Maps expression identifiers to their indices.
     expr_id_map: Map<rust::Id, idx::Expr>,
     /// Maps expression indices to their context.
@@ -64,6 +67,7 @@ impl PreCxt {
     fn _new() -> Self {
         Self {
             specs: Map::new(),
+            zip_ids: gen::ZipIds::default(),
             expr_id_map: Map::new(),
             e_cxts: idx::ExprMap::new(),
         }
@@ -183,6 +187,7 @@ impl PreCxt {
 
         Cxt {
             specs: self.specs,
+            zip_ids: self.zip_ids,
             expr_id_map: self.expr_id_map,
             e_cxts,
         }
@@ -207,6 +212,7 @@ impl FrameCxt {
 
         Cxt {
             specs: self.specs,
+            zip_ids: self.zip_ids,
             expr_id_map: self.expr_id_map,
             e_cxts,
         }
@@ -217,6 +223,10 @@ impl<ECxt> Cxt<ECxt> {
     /// Retrieves the context of a expression, if any.
     pub fn get_e_cxt(&self, id: &rust::Id) -> Option<&ECxt> {
         self.expr_id_map.get(id).map(|idx| &self[*idx])
+    }
+
+    pub fn zip_ids(&self) -> &gen::ZipIds {
+        &self.zip_ids
     }
 
     pub fn e_cxts(&self) -> &idx::ExprMap<ECxt> {

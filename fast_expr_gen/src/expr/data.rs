@@ -67,6 +67,10 @@ impl Data {
         self.src.ident.as_ref()
     }
 
+    pub fn is_self_rec(&self) -> bool {
+        self.data.is_self_rec()
+    }
+
     pub fn e_idx(&self) -> idx::Expr {
         self.e_idx
     }
@@ -154,8 +158,8 @@ impl Data {
                     let folder = &cxt[many.e_idx()].zipper_trait().coll_folders()[many.e_idx()]
                         [many.c_idx()];
                     let fold = folder.to_call_tokens(res);
-                    let zip_field = cxt[self.e_idx].zip_struct().zip_field();
-                    gen::lib::zip_do::early_return_if_not_down(quote!(#zip_field.#fold))
+                    let step_field = &cxt.zip_ids().self_step_field();
+                    gen::lib::zip_do::early_return_if_not_down(quote!(#step_field.#fold))
                 };
 
                 let keep_going = keep_going();
@@ -257,7 +261,7 @@ impl Data {
             DataTyp::One(one) => {
                 debug_assert!(!one.is_self_rec());
 
-                let zip_fun = cxt[one.inner()].zip_fun_id();
+                let zip_fun = cxt[one.inner()].self_zip_fun_id();
                 let keep_going = keep_going();
 
                 let tokens = one.extract_expr(
@@ -283,8 +287,8 @@ impl Data {
                         [many.e_idx()][many.c_idx()];
                     let acc = {
                         let init = initializer.to_call_tokens();
-                        let zip_field = cxt[many.e_idx()].zip_struct().zip_field();
-                        gen::lib::zip_do::early_return_if_not_down(quote! { #zip_field.#init })
+                        let step_field = &cxt.zip_ids().self_step_field();
+                        gen::lib::zip_do::early_return_if_not_down(quote! { #step_field.#init })
                     };
                     let iter = {
                         let iter_fun = many.iter_fun(is_own);
@@ -321,13 +325,13 @@ impl Data {
                         }
                     )
                 } else {
-                    let zip_fun = cxt[many.inner()].zip_fun_id();
+                    let zip_fun = cxt[many.inner()].self_zip_fun_id();
                     let fold_to_down = {
                         let folder = &cxt[many.e_idx()].zipper_trait().coll_folders()[many.e_idx()]
                             [many.c_idx()];
                         let fold = folder.to_call_tokens(&next_id);
-                        let zip_field = cxt[self.e_idx].zip_struct().zip_field();
-                        gen::lib::zip_do::early_return_if_not_down(quote!(#zip_field.#fold))
+                        let step_field = &cxt.zip_ids().self_step_field();
+                        gen::lib::zip_do::early_return_if_not_down(quote!(#step_field.#fold))
                     };
                     let keep_going = keep_going();
                     quote!(
@@ -374,6 +378,14 @@ impl DataTyp {
             Self::Leaf(leaf) => leaf.typ(),
             Self::One(one) => one.typ(),
             Self::Many(many) => many.typ(),
+        }
+    }
+
+    pub fn is_self_rec(&self) -> bool {
+        match self {
+            Self::Leaf(_) => false,
+            Self::One(one) => one.is_self_rec(),
+            Self::Many(many) => many.is_self_rec(),
         }
     }
 

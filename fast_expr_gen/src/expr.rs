@@ -86,6 +86,10 @@ impl Expr {
         self.e_idx
     }
 
+    pub fn is_self_rec(&self) -> bool {
+        self.variants.iter().any(|variant| variant.is_self_rec())
+    }
+
     pub fn variants(&self) -> &idx::VariantMap<Variant> {
         &self.variants
     }

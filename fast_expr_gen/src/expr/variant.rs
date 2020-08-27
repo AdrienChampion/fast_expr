@@ -38,6 +38,10 @@ impl Variant {
         &self.data
     }
 
+    pub fn is_self_rec(&self) -> bool {
+        self.data.iter().any(|data| data.is_self_rec())
+    }
+
     pub fn contains_leaf_data(&self) -> bool {
         self.data.iter().any(expr::data::Data::is_leaf)
     }
@@ -180,7 +184,7 @@ impl Variant {
 /// # Expr zipper struct codgen functions
 impl Variant {
     pub fn zip_produce_final_res(&self, cxt: &cxt::ZipCxt) -> TokenStream {
-        let zip_field = cxt[self.e_idx].zip_struct().zip_field();
+        let zip_field = &cxt.zip_ids().self_step_field();
         let go_up = &self.zipper_go_up_id;
         let data_params = self.data.iter().map(expr::data::Data::param_id);
         gen::lib::zip_do::new_go_up(quote! {

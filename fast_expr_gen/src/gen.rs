@@ -113,32 +113,6 @@ pub mod frame {
     }
 }
 
-pub mod zip {
-    use super::*;
-
-    pub fn expr_var() -> rust::Id {
-        Id::new("expr_var_reserved_for_fast_expr", span())
-    }
-    pub fn new_expr_var() -> rust::Id {
-        Id::new("new_expr_var_reserved_for_fast_expr", span())
-    }
-    pub fn res_var() -> rust::Id {
-        Id::new("res_var_reserved_for_fast_expr", span())
-    }
-    pub fn new_res_var() -> rust::Id {
-        Id::new("new_res_var_reserved_for_fast_expr", span())
-    }
-    pub fn frame_var() -> rust::Id {
-        Id::new("frame_var_reserved_for_fast_expr", span())
-    }
-    pub fn depth_var() -> rust::Id {
-        Id::new("depth_var_reserved_for_fast_expr", span())
-    }
-    pub fn zip_do_var() -> rust::Id {
-        Id::new("zip_do_var_reserved_for_fast_expr", span())
-    }
-}
-
 pub mod lifetime {
     use super::*;
 
@@ -490,6 +464,64 @@ pub mod lib {
         }
         pub fn handle_frame_fn() -> Id {
             Id::new("handle_frame", span())
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ZipIds {
+    pub expr_var: rust::Id,
+    pub new_expr_var: rust::Id,
+    pub res_var: rust::Id,
+    pub new_res_var: rust::Id,
+    pub frame_var: rust::Id,
+    pub depth_var: rust::Id,
+    pub zip_do_var: rust::Id,
+
+    pub step_field: rust::Id,
+}
+impl ZipIds {
+    fn gen_reserved(name: impl Display) -> rust::Id {
+        Id::new(&format!("{}_reserved_for_fast_expr", name), span())
+    }
+    fn gen(s: impl AsRef<str>) -> rust::Id {
+        Id::new(s.as_ref(), span())
+    }
+
+    pub fn self_step_field(&self) -> TokenStream {
+        let step_field = &self.step_field;
+        quote!(self.#step_field)
+    }
+
+    pub fn zip_fun(e_id: &rust::Id) -> rust::Id {
+        Self::gen(format!("zip_{}", rust::try_snake_from(e_id)))
+    }
+    pub fn inspect_fun(e_id: &rust::Id) -> rust::Id {
+        Self::gen(format!("inspect_{}", rust::try_snake_from(e_id)))
+    }
+    pub fn handle_frame_fun(e_id: &rust::Id) -> rust::Id {
+        Self::gen(format!("handle_frame_{}", rust::try_snake_from(e_id)))
+    }
+    pub fn handle_expr_fun(e_id: &rust::Id) -> rust::Id {
+        Self::gen(format!("handle_{}", rust::try_snake_from(e_id)))
+    }
+
+    pub fn stack_field(e_id: &rust::Id) -> rust::Id {
+        Self::gen(format!("stack_{}", rust::try_snake_from(e_id)))
+    }
+}
+impl Default for ZipIds {
+    fn default() -> Self {
+        Self {
+            expr_var: Self::gen_reserved("expr"),
+            new_expr_var: Self::gen_reserved("new_expr"),
+            res_var: Self::gen_reserved("res"),
+            new_res_var: Self::gen_reserved("new_res"),
+            frame_var: Self::gen_reserved("frame"),
+            depth_var: Self::gen_reserved("depth"),
+            zip_do_var: Self::gen_reserved("zip_do"),
+
+            step_field: Self::gen_reserved("step"),
         }
     }
 }

@@ -371,13 +371,12 @@ impl VFrames {
         let e_cxt = &cxt[self.e_idx];
         let id = e_cxt.id();
         let id = gen::fun::frame_handler(id);
-        logln!("generating {}", id);
-        let frame_var = gen::zip::frame_var();
+        let frame_var = &cxt.zip_ids().frame_var;
         let frame_typ = e_cxt
             .frames()
             .expect("trying to generate frame handler for frame-less expression type")
             .plain_typ(is_own);
-        let res_var = gen::zip::res_var();
+        let res_var = &cxt.zip_ids().res_var;
         let res_typ = e_cxt.res_typ_id();
         let out_typ = e_cxt.zip_variant_handler_out_typ(is_own);
 

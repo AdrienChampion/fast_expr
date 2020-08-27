@@ -9,8 +9,6 @@ use fast_expr_gen::syn;
 /// Entry point, parses a token stream and generates code.
 #[proc_macro]
 pub fn expr(stream: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    logln!("parsing...");
-
     let top = syn::parse_macro_input!(stream as front::Top);
 
     match internal(top) {
