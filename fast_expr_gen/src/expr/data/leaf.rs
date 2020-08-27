@@ -42,4 +42,7 @@ impl Leaf {
     pub fn frame_res(&self, e_cxt: &cxt::pre::ECxt, is_own: IsOwn) -> rust::Typ {
         self.frame_typ(e_cxt, is_own)
     }
+    pub fn zip_res(&self, e_cxt: &cxt::pre::ECxt, is_own: IsOwn) -> rust::Typ {
+        self.frame_res(e_cxt, is_own)
+    }
 }

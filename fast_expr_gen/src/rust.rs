@@ -9,8 +9,8 @@ pub mod typ;
 pub use proc_macro2::Span;
 pub use syn::{
     Attribute, Field, GenericArgument as GenericArg, GenericParam, Generics, Ident as Id,
-    ItemEnum as Enum, ItemTrait as Trait, Lifetime, Path, Type as Typ, TypeParam as TypParam,
-    Variant,
+    ItemEnum as Enum, ItemFn as Fn, ItemTrait as Trait, Lifetime, Path, Type as Typ,
+    TypeParam as TypParam, Variant,
 };
 
 /// A list of generic arguments.
@@ -29,6 +29,21 @@ pub enum TypParamDef {
     Lifetime(Lifetime),
     /// A type identifier.
     Typ(Id),
+}
+
+pub fn try_snake_from(id: &Id) -> Id {
+    if let Ok(id) = CamelId::try_from(id.clone()).and_then(|id| id.to_snake()) {
+        id.id
+    } else {
+        id.clone()
+    }
+}
+pub fn try_camel_from(id: &Id) -> Id {
+    if let Ok(id) = SnakeId::try_from(id.clone()).and_then(|id| id.to_camel()) {
+        id.id
+    } else {
+        id.clone()
+    }
 }
 
 /// Snake-case identifiers.
@@ -86,10 +101,10 @@ impl CamelId {
     pub fn to_snake(&self) -> Res<SnakeId> {
         let id = self.id.to_string();
         let mut res = String::with_capacity(id.len());
-        let mut insert_us = false;
+        let mut is_first = true;
         for char in id.chars() {
             if char.is_uppercase() {
-                if insert_us {
+                if !is_first {
                     res.push('_')
                 }
                 for char in char.to_lowercase() {
@@ -97,8 +112,8 @@ impl CamelId {
                 }
             } else {
                 res.push(char);
-                insert_us = true
             }
+            is_first = false
         }
         Id::new(&res, self.id.span()).try_into()
     }

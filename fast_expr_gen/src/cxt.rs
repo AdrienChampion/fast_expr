@@ -2,13 +2,9 @@
 
 prelude! {}
 
-pub mod frame_enum;
-pub mod zip_struct;
-
+pub mod frames;
 pub mod pre;
-pub mod with_frames;
-
-pub use self::{frame_enum::FrameEnum, zip_struct::ZipStruct};
+pub mod zip;
 
 #[derive(Debug, Clone)]
 pub struct Spec {
@@ -40,7 +36,8 @@ impl Spec {
 }
 
 pub type PreCxt = Cxt<pre::ECxt>;
-pub type FrameCxt = Cxt<with_frames::ECxt>;
+pub type FrameCxt = Cxt<frames::ECxt>;
+pub type ZipCxt = Cxt<zip::ECxt>;
 
 #[derive(Debug, Clone)]
 pub struct Cxt<ECxt> {
@@ -53,22 +50,22 @@ pub struct Cxt<ECxt> {
     ///
     /// The normal way to access this out of this module is by indexing the context:
     /// `cxt[expr_idx]`.
-    exprs: idx::ExprMap<ECxt>,
+    e_cxts: idx::ExprMap<ECxt>,
 }
 implement! {
     impl(ECxt) Cxt<ECxt> {
         Index<idx::Expr, ECxt> {
-            |self, idx| &self.exprs[idx]
+            |self, idx| &self.e_cxts[idx]
         }
     }
 }
 
-impl Cxt<pre::ECxt> {
+impl PreCxt {
     fn _new() -> Self {
         Self {
             specs: Map::new(),
             expr_id_map: Map::new(),
-            exprs: idx::ExprMap::new(),
+            e_cxts: idx::ExprMap::new(),
         }
     }
     fn push_spec(&mut self, spec: rust::Trait) -> Res<()> {
@@ -88,7 +85,7 @@ impl Cxt<pre::ECxt> {
     }
     fn push_expr(&mut self, expr: rust::Enum) -> Res<idx::Expr> {
         let new_span = expr.ident.span();
-        let e_idx = self.exprs.next_index();
+        let e_idx = self.e_cxts.next_index();
 
         let prev = self.expr_id_map.insert(expr.ident.clone(), e_idx);
         if let Some(prev_idx) = prev {
@@ -99,7 +96,7 @@ impl Cxt<pre::ECxt> {
             )
         }
 
-        let _e_idx = self.exprs.push(pre::ECxt::new(self, e_idx, expr)?);
+        let _e_idx = self.e_cxts.push(pre::ECxt::new(self, e_idx, expr)?);
         debug_assert_eq!(e_idx, _e_idx);
 
         Ok(e_idx)
@@ -129,16 +126,16 @@ impl Cxt<pre::ECxt> {
             for spec in self.specs.values() {
                 spec.log(_pref)
             }
-            for ecxt in &self.exprs {
+            for ecxt in &self.e_cxts {
                 ecxt.log(_pref)
             }
         }}
     }
 }
 
-impl Cxt<pre::ECxt> {
+impl PreCxt {
     pub fn register_expr_data(&mut self, e_idx: idx::Expr, mentions: idx::Expr) {
-        let _is_new = self.exprs[e_idx].add_dep(mentions);
+        let _is_new = self.e_cxts[e_idx].add_dep(mentions);
     }
     pub fn register_expr_coll_data(
         &mut self,
@@ -159,42 +156,71 @@ impl Cxt<pre::ECxt> {
             d_id,
             c_idx,
         );
-        let _c_idx = self.exprs[e_idx].push_coll(coll);
+        let _c_idx = self.e_cxts[e_idx].push_coll(coll);
         debug_assert_eq!(c_idx, _c_idx);
         c_idx
     }
 
-    pub fn generate_frames(self, exprs: &expr::Exprs) -> Cxt<with_frames::ECxt> {
-        let deps = pre::ECxt::generate_deps(&self, exprs);
+    pub fn generate_frames(self, exprs: expr::Exprs) -> FrameCxt {
+        let frame_info = pre::ECxt::generate_frame_info(&self, &exprs);
 
-        debug_assert_eq!(self.exprs.len(), deps.len());
+        debug_assert_eq!(self.e_cxts.len(), frame_info.len());
+        debug_assert_eq!(self.e_cxts.len(), exprs.len());
 
-        let exprs = self
-            .exprs
+        let e_cxts = self
+            .e_cxts
             .into_index_iter()
-            .zip(deps.into_index_iter())
-            .map(|((e_idx, pre_e_cxt), (_e_idx, deps))| {
+            .zip(frame_info.into_index_iter())
+            .zip(exprs.into_index_iter())
+            .map(
+                |(((e_idx, pre_e_cxt), (_e_idx, frame_info)), (__e_idx, expr))| {
+                    assert_eq!(e_idx, _e_idx);
+                    assert_eq!(e_idx, __e_idx);
+                    frames::ECxt::new(pre_e_cxt, frame_info, expr)
+                },
+            )
+            .collect();
+
+        Cxt {
+            specs: self.specs,
+            expr_id_map: self.expr_id_map,
+            e_cxts,
+        }
+    }
+}
+
+impl FrameCxt {
+    pub fn generate_zip(self) -> ZipCxt {
+        let zip_info = frames::ECxt::generate_zip_info(&self);
+
+        debug_assert_eq!(self.e_cxts.len(), zip_info.len());
+
+        let e_cxts = self
+            .e_cxts
+            .into_index_iter()
+            .zip(zip_info.into_index_iter())
+            .map(|((e_idx, frame_e_cxt), (_e_idx, zip_info))| {
                 assert_eq!(e_idx, _e_idx);
-                with_frames::ECxt::new(pre_e_cxt, deps, &exprs[e_idx])
+                zip::ECxt::new(frame_e_cxt, zip_info)
             })
             .collect();
 
         Cxt {
             specs: self.specs,
             expr_id_map: self.expr_id_map,
-            exprs,
+            e_cxts,
         }
     }
 }
 
 impl<ECxt> Cxt<ECxt> {
     /// Retrieves the context of a expression, if any.
-    pub fn get_expr(&self, id: &rust::Id) -> Option<&ECxt> {
+    pub fn get_e_cxt(&self, id: &rust::Id) -> Option<&ECxt> {
         self.expr_id_map.get(id).map(|idx| &self[*idx])
     }
 
-    pub fn exprs(&self) -> &idx::ExprMap<ECxt> {
-        &self.exprs
+    pub fn e_cxts(&self) -> &idx::ExprMap<ECxt> {
+        &self.e_cxts
     }
 
     /// Retrieves the specification of an identifier, if any.
@@ -203,414 +229,9 @@ impl<ECxt> Cxt<ECxt> {
     }
 }
 
-// #[derive(Debug, Clone)]
-// pub struct ECxt {
-//     /// Expression index.
-//     e_idx: idx::Expr,
-
-//     /// Result type identifier.
-//     res_typ_id: rust::Id,
-//     /// Result type.
-//     res_typ: rust::Typ,
-
-//     /// Expression types mentioned by this expression's definition.
-//     ///
-//     /// Includes self if self-recursive.
-//     ///
-//     /// **Only valid after finalization.**
-//     e_deps: Set<idx::Expr>,
-
-//     /// Dependency fixed point.
-//     ///
-//     /// Always includes self.
-//     ///
-//     /// **Only valid after finalization.**
-//     fp_e_deps: Set<idx::Expr>,
-
-//     /// Collection contexts.
-//     ///
-//     /// **Only valid after finalization.**
-//     colls: idx::CollMap<CollCxt>,
-
-//     /// Generics associated with this expression.
-//     generics: Option<rust::Generics>,
-
-//     /// Generics of the frame enum for this expression.
-//     ///
-//     /// **Only valid after finalization.**
-//     own_frame_generics: rust::Generics,
-//     /// Same as `own_frame_generics`, but with the expression lifetime added as the first parameter.
-//     ///
-//     /// **Only valid after finalization.**
-//     ref_frame_generics: rust::Generics,
-
-//     /// Type parameters introduced by `self.generics()`.
-//     top_t_params: rust::GenericArgs,
-
-//     /// Frame-type identifier.
-//     frame_typ_id: rust::Id,
-
-//     /// Zip-struct info.
-//     zip_struct: Option<ZipStruct>,
-
-//     /// Expression definition from the frontend.
-//     def: rust::Enum,
-// }
-
-// impl ECxt {
-//     /// Constructor.
-//     ///
-//     /// **Warning**: the result of this function is not a fully functional context. It needs to be
-//     /// [`finalize`]d.
-//     ///
-//     /// [`finalize`]: #method.finalize
-//     fn new(cxt: &Cxt, e_idx: idx::Expr, def: rust::Enum) -> Res<Self> {
-//         let res_typ_id = gen::typ::res(&def.ident);
-//         let res_typ = rust::typ::plain(res_typ_id.clone(), None);
-
-//         let generics = {
-//             let mut params = def.generics.params.iter();
-//             match (params.next(), params.next()) {
-//                 (Some(rust::GenericParam::Type(maybe_spec)), None) => {
-//                     if let Some(spec) = cxt.get_spec(&maybe_spec.ident) {
-//                         Some(spec.generics().clone())
-//                     } else {
-//                         None
-//                     }
-//                 }
-//                 _ => None,
-//             }
-//         };
-
-//         let own_frame_generics = generics.as_ref().unwrap_or(&def.generics).clone();
-//         let ref_frame_generics = {
-//             use syn::*;
-
-//             let mut generics = own_frame_generics.clone();
-//             let params = std::mem::replace(&mut generics.params, punctuated::Punctuated::new());
-
-//             let expr_lt = GenericParam::Lifetime(LifetimeDef {
-//                 attrs: vec![],
-//                 lifetime: gen::lifetime::expr(),
-//                 colon_token: None,
-//                 bounds: punctuated::Punctuated::new(),
-//             });
-
-//             generics.params.push(expr_lt);
-//             generics.params.extend(params);
-
-//             generics
-//         };
-
-//         let top_t_params = {
-//             let generics = generics.as_ref().unwrap_or(&def.generics);
-//             generics
-//                 .params
-//                 .iter()
-//                 .map(|param| {
-//                     use rust::{GenericArg, GenericParam::*};
-//                     match param {
-//                         Type(typ) => {
-//                             let typ = &typ.ident;
-//                             GenericArg::Type(syn::parse_quote!(#typ))
-//                         }
-//                         Lifetime(lt) => GenericArg::Lifetime(lt.lifetime.clone()),
-//                         Const(cst) => {
-//                             let cst = &cst.ident;
-//                             GenericArg::Const(syn::parse_quote!(#cst))
-//                         }
-//                     }
-//                 })
-//                 .collect()
-//         };
-
-//         let e_deps = Set::new();
-//         let fp_e_deps = Set::new();
-
-//         let frame_typ_id = gen::frame::typ_id(&def.ident);
-
-//         let colls = idx::CollMap::new();
-
-//         Ok(Self {
-//             e_idx,
-//             res_typ_id,
-//             res_typ,
-
-//             e_deps,
-//             fp_e_deps,
-//             colls,
-
-//             generics,
-//             ref_frame_generics,
-//             own_frame_generics,
-
-//             top_t_params,
-
-//             frame_typ_id,
-
-//             zip_struct: None,
-
-//             def,
-//         })
-//     }
-
-//     fn finalize(selves: &mut idx::ExprMap<Self>, exprs: &idx::ExprMap<expr::Expr>) -> Res<()> {
-//         let mut e_idx;
-
-//         macro_rules! e_iter {
-//             ($($action:tt)*) => {{
-//                 e_idx = idx::Expr::zero();
-//                 while e_idx < selves.len() {
-//                     { $($action)* }
-
-//                     e_idx.inc()
-//                 }
-//             }};
-//         }
-
-//         // Compute dependency fixed points.
-//         let mut known;
-//         let mut todo = vec![];
-//         logln!("computing fp-s");
-//         e_iter! {
-//             known = Set::new();
-//             debug_assert!(todo.is_empty());
-
-//             logln!("- {}", selves[e_idx].id());
-
-//             let _is_new = selves[e_idx].fp_e_deps.insert(e_idx);
-//             let _is_new = known.insert(e_idx);
-//             debug_assert!(_is_new);
-
-//             todo.extend(selves[e_idx].e_deps.iter().cloned());
-
-//             logln!("  processing {} deps", todo.len());
-
-//             'fp: loop {
-//                 let dep_e_idx = if let Some(e_idx) = todo.pop() {
-//                     e_idx
-//                 } else {
-//                     todo.clear();
-//                     break 'fp;
-//                 };
-
-//                 let _ = selves[e_idx].fp_e_deps.insert(dep_e_idx);
-//                 let is_new = known.insert(dep_e_idx);
-//                 if !is_new || dep_e_idx == e_idx {
-//                     continue 'fp;
-//                 }
-
-//                 // Alright, we're about to do some unsafe stuff. Nothing actually unsafe is going on
-//                 // as long as THIS assert HOLDS.
-//                 assert_ne!(dep_e_idx, e_idx);
-//                 // Going to raw pointers here, because we need to borrow DIFFERENT CELLS of
-//                 // `selves` as mutable and immutable at the same time.
-//                 let slf = {
-//                     let tmp: *mut Self = &mut selves[e_idx];
-//                     unsafe {&mut *tmp}
-//                 };
-//                 let dep = {
-//                     let tmp: *const Self = & selves[dep_e_idx];
-//                     unsafe {&*tmp}
-//                 };
-
-//                 // Have we already computed the fixed point of `dep`?
-//                 if dep_e_idx < e_idx {
-//                     // Yeah, just merge it in `slf`.
-//                     known.extend(dep.fp_e_deps.iter().cloned());
-//                     slf.fp_e_deps.extend(dep.fp_e_deps.iter().cloned());
-//                 } else {
-//                     // No, add its dependencies as todos.
-//                     for sub_dep_e_idx in dep.e_deps.iter().cloned() {
-//                         let is_new = slf.fp_e_deps.insert(sub_dep_e_idx);
-//                         if is_new {
-//                             todo.push(sub_dep_e_idx)
-//                         }
-//                     }
-//                 }
-//             }
-//         }
-
-//         logln!("fixed points:");
-//         e_iter! {
-//             logln!("- {}:", selves[e_idx].id());
-//             for idx in selves[e_idx].fp_e_deps.iter().cloned() {
-//                 logln!("  {}", selves[idx].id())
-//             }
-//         }
-
-//         // Populate frame type parameters.
-//         e_iter! {
-//             let deps = selves[e_idx].e_deps.clone();
-
-//             for dep_e_idx in deps {
-//                 let ident = gen::typ::res(exprs[dep_e_idx].id());
-
-//                 let typ_param = rust::typ::param::from_id(ident);
-
-//                 selves[e_idx]
-//                     .own_frame_generics
-//                     .params
-//                     .push(syn::GenericParam::Type(typ_param.clone()));
-//                 selves[e_idx]
-//                     .ref_frame_generics
-//                     .params
-//                     .push(syn::GenericParam::Type(typ_param));
-
-//                 if dep_e_idx == e_idx {
-//                     let mut c_idx = idx::Coll::zero();
-//                     while c_idx < selves[dep_e_idx].colls().len() {
-//                         let typ_param = rust::typ::param::from_id(
-//                             selves[dep_e_idx].colls()[c_idx].acc_t_param_id().clone(),
-//                         );
-//                         selves[e_idx]
-//                             .own_frame_generics
-//                             .params
-//                             .push(syn::GenericParam::Type(typ_param.clone()));
-//                         selves[e_idx]
-//                             .ref_frame_generics
-//                             .params
-//                             .push(syn::GenericParam::Type(typ_param));
-
-//                         c_idx.inc();
-//                     }
-//                 }
-//             }
-//         }
-
-//         // Construct zip-struct info.
-//         e_iter! {
-//             debug_assert!(selves[e_idx].zip_struct.is_none());
-//             selves[e_idx].zip_struct = Some(ZipStruct::new(e_idx, selves))
-//         }
-
-//         Ok(())
-//     }
-
-//     /// Index accessor.
-//     pub fn e_idx(&self) -> idx::Expr {
-//         self.e_idx
-//     }
-
-//     /// Identifier accessor.
-//     pub fn id(&self) -> &rust::Id {
-//         &self.def.ident
-//     }
-//     /// Id of a variant.
-//     pub fn v_id(&self, v_idx: idx::Variant) -> &rust::Id {
-//         &self.def.variants[*v_idx].ident
-//     }
-
-//     /// Result type identifier.
-//     pub fn res_typ_id(&self) -> &rust::Id {
-//         &self.res_typ_id
-//     }
-//     /// Result type.
-//     pub fn res_typ(&self) -> &rust::Typ {
-//         &self.res_typ
-//     }
-//     /// Frame-type identifier.
-//     pub fn frame_typ_id(&self) -> &rust::Id {
-//         &self.frame_typ_id
-//     }
-
-//     /// Collection contexts accessor.
-//     pub fn colls(&self) -> &idx::CollMap<CollCxt> {
-//         &self.colls
-//     }
-
-//     /// Expression enum definition.
-//     pub fn def(&self) -> &rust::Enum {
-//         &self.def
-//     }
-
-//     /// Generics accessor.
-//     pub fn generics(&self) -> &rust::Generics {
-//         self.generics.as_ref().unwrap_or(&self.def.generics)
-//     }
-//     /// Types introduced in the generics, as arguments.
-//     pub fn top_t_params(&self) -> &rust::GenericArgs {
-//         &self.top_t_params
-//     }
-
-//     pub fn log(&self, _pref: impl Display + Copy) {
-//         logln!(
-//             "{}expr({}) {}<{}>",
-//             _pref,
-//             self.e_idx(),
-//             self.id(),
-//             self.top_t_params
-//                 .iter()
-//                 .fold(String::new(), |acc, t| format!(
-//                     "{}{}{},",
-//                     acc,
-//                     if acc.is_empty() { "" } else { " " },
-//                     t.to_token_stream(),
-//                 )),
-//         )
-//     }
-
-//     pub fn zip_struct(&self) -> &ZipStruct {
-//         self.zip_struct
-//             .as_ref()
-//             .unwrap_or_else(|| panic!("trying to access ECxt::zip_struct before finalization"))
-//     }
-
-//     fn add_dep(&mut self, e_idx: idx::Expr) -> bool {
-//         self.e_deps.insert(e_idx)
-//     }
-// }
-
-// impl ECxt {
-//     pub fn frame_generics(&self, is_own: IsOwn) -> &rust::Generics {
-//         if is_own {
-//             &self.own_frame_generics
-//         } else {
-//             &self.ref_frame_generics
-//         }
-//     }
-
-//     pub fn frame_sink_arg(&self, cxt: &Cxt, is_own: IsOwn) -> rust::Typ {
-//         let typs = self
-//             .e_deps
-//             .iter()
-//             .cloned()
-//             .map(|e_idx| cxt[e_idx].res_typ())
-//             .cloned();
-//         let typ = rust::typ::tuple(typs);
-
-//         if is_own {
-//             typ
-//         } else {
-//             rust::typ::reference(Some(gen::lifetime::expr()), typ)
-//         }
-//     }
-// }
-
-// impl ECxt {
-//     pub fn zip_struct_generics(&self, is_own: IsOwn) -> rust::Generics {
-//         let mut gen = self.frame_generics(is_own).clone();
-
-//         let e_id = self.id();
-//         let lib_path = gen::lib_path();
-//         let zip_param = gen::typ::param::zip();
-//         gen.params.push(syn::parse_quote!(#zip_param));
-//         let wc = gen.where_clause.get_or_insert_with(|| syn::WhereClause {
-//             where_token: syn::token::Where::default(),
-//             predicates: syn::punctuated::Punctuated::new(),
-//         });
-
-//         let zipper_trait = gen::trai::lib::zipper();
-//         let (_, params, _) = self.generics().split_for_impl();
-//         wc.predicates
-//             .push(syn::parse_quote!(#zip_param: #lib_path :: #zipper_trait<#e_id #params>));
-
-//         gen
-//     }
-// }
-
 #[derive(Debug, Clone)]
 pub struct CollCxt {
+    e_idx: idx::Expr,
     /// Variant the collection is for.
     v_idx: idx::Variant,
     /// Data the collection is for.
@@ -624,7 +245,7 @@ pub struct CollCxt {
 }
 impl CollCxt {
     pub fn new(
-        _e_idx: idx::Expr,
+        e_idx: idx::Expr,
         e_id: &rust::Id,
         v_idx: idx::Variant,
         v_id: &rust::Id,
@@ -640,12 +261,26 @@ impl CollCxt {
         );
         let acc_t_param = rust::typ::plain(acc_t_param_id.clone(), None);
         Self {
+            e_idx,
             v_idx,
             d_idx,
             c_idx,
             acc_t_param_id,
             acc_t_param,
         }
+    }
+
+    pub fn e_idx(&self) -> idx::Expr {
+        self.e_idx
+    }
+    pub fn v_idx(&self) -> idx::Variant {
+        self.v_idx
+    }
+    pub fn d_idx(&self) -> idx::Data {
+        self.d_idx
+    }
+    pub fn c_idx(&self) -> idx::Coll {
+        self.c_idx
     }
 
     pub fn acc_t_param(&self) -> &rust::Typ {
@@ -657,17 +292,18 @@ impl CollCxt {
 }
 
 #[derive(Debug, Clone)]
-pub struct Top<ECxt> {
-    pub cxt: Cxt<ECxt>,
-    pub exprs: idx::ExprMap<expr::Expr>,
+pub struct Top<Cxt, Exprs> {
+    pub cxt: Cxt,
+    pub exprs: Exprs,
 }
-impl Top<pre::ECxt> {
-    pub fn new(top: front::Top) -> Res<Self> {
+
+impl Top<PreCxt, expr::Exprs> {
+    pub fn new_pre(top: front::Top) -> Res<Self> {
         let mut cxt = Cxt::new(top)?;
         let exprs = {
-            let mut exprs = idx::ExprMap::with_capacity(cxt.exprs.len());
+            let mut exprs = idx::ExprMap::with_capacity(cxt.e_cxts.len());
             let mut e_idx = idx::Expr::zero();
-            while e_idx < cxt.exprs.len() {
+            while e_idx < cxt.e_cxts.len() {
                 let expr = expr::Expr::from_front(&mut cxt, e_idx)?;
                 let _e_idx = exprs.push(expr);
                 debug_assert_eq!(e_idx, _e_idx);
@@ -678,61 +314,109 @@ impl Top<pre::ECxt> {
         Ok(Self { cxt, exprs })
     }
 
-    pub fn log(&self, pref: &str) {
-        let sub_pref = &format!("{}    ", pref);
-        logln!("cxt {{");
-        self.cxt.log(sub_pref);
-        logln!("}}");
-        logln!("exprs {{");
-        for expr in &self.exprs {
-            expr.log(sub_pref);
-        }
-        logln!("}}");
-    }
-
-    pub fn generate_frames(self) -> Top<with_frames::ECxt> {
+    pub fn generate_frames(self) -> Top<FrameCxt, ()> {
         let exprs = self.exprs;
-        let cxt = self.cxt.generate_frames(&exprs);
-        Top { cxt, exprs }
+        let cxt = self.cxt.generate_frames(exprs);
+        Top { cxt, exprs: () }
     }
 }
 
-impl Top<with_frames::ECxt> {
+impl Top<FrameCxt, ()> {
+    pub fn generate_zip_structs(self) -> Top<ZipCxt, ()> {
+        let cxt = self.cxt.generate_zip();
+        Top { cxt, exprs: () }
+    }
+}
+
+impl Top<ZipCxt, ()> {
+    pub fn new(top: front::Top) -> Res<Self> {
+        Top::new_pre(top).map(|pre_top| pre_top.generate_frames().generate_zip_structs())
+    }
+
     pub fn to_expr_enum_tokens(&self, stream: &mut TokenStream) {
-        for expr in &self.exprs {
-            expr.to_expr_enum_tokens(stream)
+        for e_cxt in self.cxt.e_cxts() {
+            e_cxt.expr().to_expr_enum_tokens(stream)
         }
     }
 
     pub fn to_zip_mod_tokens_for(&self, stream: &mut TokenStream, is_own: IsOwn) {
         let (zip_doc, zip_mod) = (gen::doc::module::zip(is_own), gen::module::zip(is_own));
 
-        let zip_tokens = self
+        let tokens = self
             .cxt
-            .exprs()
+            .e_cxts()
             .iter()
-            .map(|e_cxt| e_cxt.frame_enum_tokens(is_own));
+            .map(|e_cxt| e_cxt.zip_mod_tokens(&self.cxt, is_own));
 
         stream.extend(quote! {
             #[doc = #zip_doc]
             pub mod #zip_mod {
                 use super::*;
 
-                #(#zip_tokens)*
+                #(#tokens)*
             }
         })
     }
 
     pub fn to_zip_mods_tokens(&self, stream: &mut TokenStream) {
         self.to_zip_mod_tokens_for(stream, true);
-        // self.to_zip_mod_tokens_for(stream, false);
+        self.to_zip_mod_tokens_for(stream, false);
     }
 }
 
-impl ToTokens for Top<with_frames::ECxt> {
+impl ToTokens for Top<ZipCxt, ()> {
     fn to_tokens(&self, stream: &mut TokenStream) {
         self.to_expr_enum_tokens(stream);
 
         self.to_zip_mods_tokens(stream);
+    }
+}
+
+impl Top<ZipCxt, ()> {
+    #[cfg(not(feature = "dbg_log"))]
+    pub fn dbg_log_to_file(&self) {}
+    #[cfg(feature = "dbg_log")]
+    pub fn dbg_log_to_file(&self) {
+        use std::{fs::OpenOptions, process::Command};
+
+        let file_path = &format!("fast_expr_log.rs");
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open(file_path)
+            .unwrap_or_else(|e| panic!("failed to open {:?}: {}", file_path, e));
+
+        write!(file, "{}", self.to_token_stream())
+            .unwrap_or_else(|e| panic!("failed to write to {:?}: {}", file_path, e));
+
+        let output = Command::new("rustfmt")
+            .arg(file_path)
+            .output()
+            .unwrap_or_else(|e| panic!("failed to run rustfmt on {:?}: {}", file_path, e));
+
+        if !output.status.success() {
+            let stdout = String::from_utf8(output.stdout)
+                .unwrap_or_else(|e| panic!("failed to convert rustfmt's stdout to utf8: {}", e));
+            let stderr = String::from_utf8(output.stderr)
+                .unwrap_or_else(|e| panic!("failed to convert rustfmt's stderr to utf8: {}", e));
+
+            println!("Error while running rustfmt");
+            println!("|===| stdout");
+            println!("|");
+            for line in stdout.lines() {
+                println!("| {}", line)
+            }
+            println!("|");
+            println!("|===| stderr");
+            println!("|");
+            for line in stderr.lines() {
+                println!("| {}", line)
+            }
+            println!("|");
+            println!("|===|");
+
+            panic!("rustfmt failed while formatting {:?}", file_path)
+        }
     }
 }

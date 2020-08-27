@@ -22,6 +22,19 @@ impl CollSpec {
             self.ref_iter
         }
     }
+
+    pub fn iter_on(&self, is_own: IsOwn, typ: &rust::Typ) -> rust::Typ {
+        let arg = syn::parse_quote!(Item = #typ);
+        self.iter(is_own).to_typ(gen::span(), Some(vec![arg]))
+    }
+
+    pub fn iter_fun(&self, is_own: IsOwn) -> rust::Id {
+        if is_own {
+            rust::Id::new("into_iter", gen::span())
+        } else {
+            rust::Id::new("iter", gen::span())
+        }
+    }
 }
 
 macro_rules! coll_spec {
@@ -139,9 +152,23 @@ impl Many {
     pub fn d_idx(&self) -> idx::Data {
         self.inner.d_idx()
     }
+    pub fn c_idx(&self) -> idx::Coll {
+        self.c_idx
+    }
 
     pub fn acc_t_param<'a>(&self, e_cxt: &'a cxt::pre::ECxt) -> &'a rust::Typ {
         e_cxt.colls()[self.c_idx].acc_t_param()
+    }
+
+    pub fn iter_typ(&self, is_own: IsOwn, typ: &rust::Typ) -> rust::Typ {
+        self.coll.spec().iter_on(is_own, typ)
+    }
+    pub fn iter_fun(&self, is_own: IsOwn) -> rust::Id {
+        self.coll.spec().iter_fun(is_own)
+    }
+
+    pub fn is_self_rec(&self) -> bool {
+        self.inner.is_self_rec()
     }
 }
 
@@ -165,7 +192,7 @@ impl Many {
     }
     pub fn frame_der(&self, e_cxt: &cxt::pre::ECxt, is_own: IsOwn) -> Option<rust::Typ> {
         let spec = self.coll.spec();
-        let acc = self.acc_t_param(e_cxt).clone();
+        let acc = self.acc_t_param(e_cxt);
 
         let mut args = vec![];
         if !is_own {
@@ -176,9 +203,49 @@ impl Many {
         let iter = spec
             .iter(is_own)
             .to_typ(rust::Span::mixed_site(), Some(args));
-        Some(rust::typ::lib::coll_der(acc, iter))
+        Some(rust::typ::lib::coll_der(acc, &iter))
     }
     pub fn frame_res(&self, e_cxt: &cxt::pre::ECxt, _is_own: IsOwn) -> rust::Typ {
         self.acc_t_param(e_cxt).clone()
     }
+    pub fn zip_res(&self, e_cxt: &cxt::pre::ECxt, _is_own: IsOwn) -> rust::Typ {
+        let acc_t_param = self.acc_t_param(e_cxt);
+        syn::parse_quote!(Self :: #acc_t_param)
+    }
 }
+
+// impl Many {
+//     pub fn extract_expr(
+//         &self,
+//         slf: &rust::Id,
+//         is_own: IsOwn,
+//         if_some: impl FnOnce(TokenStream) -> TokenStream,
+//         if_none: impl FnOnce() -> TokenStream,
+//     ) -> TokenStream {
+//         match &self.wrap {
+//             Wrap::Plain => if_some(quote!(#slf)),
+//             Wrap::Box(_) => if_some(if is_own {
+//                 quote!(* #slf)
+//             } else {
+//                 quote!(&** #slf)
+//             }),
+//             Wrap::Ref { .. } => {
+//                 assert!(!is_own);
+//                 if_some(quote!(&** #slf))
+//             }
+//             Wrap::Option(_) => {
+//                 let as_ref = if is_own { quote!() } else { quote!(.as_ref()) };
+//                 let if_some = if_some(slf.to_token_stream());
+//                 let if_none = if_none();
+//                 quote! {
+//                     if let Some(#slf) = #slf #as_ref {
+//                         #if_some
+//                     } else {
+//                         let #slf = None;
+//                         #if_none
+//                     }
+//                 }
+//             }
+//         }
+//     }
+// }

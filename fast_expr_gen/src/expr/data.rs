@@ -20,6 +20,8 @@ pub struct Data {
     data: DataTyp,
 
     src: rust::Field,
+
+    param_id: rust::Id,
 }
 
 impl Data {
@@ -42,6 +44,13 @@ impl Data {
             typ,
         )?;
 
+        let param_id = gen::fun::param::data_param(
+            src.ident
+                .as_ref()
+                .map(Either::Left)
+                .unwrap_or_else(|| Either::Right(d_idx)),
+        );
+
         Ok(Self {
             e_idx,
             v_idx,
@@ -49,6 +58,8 @@ impl Data {
 
             data: data_typ.into(),
             src,
+
+            param_id,
         })
     }
 
@@ -74,14 +85,31 @@ impl Data {
         self.data.typ()
     }
 
+    pub fn is_leaf(&self) -> bool {
+        self.data.is_leaf()
+    }
+
+    pub fn param_id(&self) -> &rust::Id {
+        &self.param_id
+    }
+
     pub fn map_rec_exprs(&self, action: impl FnMut(idx::Expr, IsColl) -> Res<()>) -> Res<()> {
         self.data.map_rec_exprs(action)
+    }
+
+    pub fn as_many(&self) -> Option<&Many> {
+        match &self.data {
+            DataTyp::Many(many) => Some(many),
+            DataTyp::Leaf(_) | DataTyp::One(_) => None,
+        }
+    }
+    pub fn inner(&self) -> Option<idx::Expr> {
+        self.data.inner()
     }
 }
 
 impl Data {
     pub fn to_expr_data_tokens(&self, stream: &mut TokenStream) {
-        logln!("- {}", self);
         stream.append_all(&self.src.attrs);
         self.src.vis.to_tokens(stream);
         if let Some(ident) = &self.src.ident {
@@ -97,6 +125,224 @@ impl Data {
         }
         self.data.to_expr_data_tokens(stream);
     }
+
+    pub fn zip_handle_frame(
+        &self,
+        cxt: &cxt::ZipCxt,
+        res: &rust::Id,
+        is_own: IsOwn,
+        frame_expr_pair_do: impl FnOnce(TokenStream) -> TokenStream,
+        keep_going: impl FnOnce() -> TokenStream,
+    ) -> TokenStream {
+        let id = self.param_id();
+
+        match self.data() {
+            DataTyp::One(one) if one.is_self_rec() => {
+                let keep_going = keep_going();
+                quote! {
+                    let #id = #res;
+                    #keep_going
+                }
+            }
+
+            DataTyp::Many(many) if many.is_self_rec() => {
+                let next_id = rust::Id::new("fast_expr_reserved_next", gen::span());
+                let acc_field = gen::lib::coll_der::acc_field();
+                let iter_field = gen::lib::coll_der::iter_field();
+
+                let fold = {
+                    let folder = &cxt[many.e_idx()].zipper_trait().coll_folders()[many.e_idx()]
+                        [many.c_idx()];
+                    let fold = folder.to_call_tokens(res);
+                    let zip_field = cxt[self.e_idx].zip_struct().zip_field();
+                    gen::lib::zip_do::early_return_if_not_down(quote!(#zip_field.#fold))
+                };
+
+                let keep_going = keep_going();
+                let build_frame = cxt[self.e_idx]
+                    .frames()
+                    .unwrap_or_else(|| {
+                        panic!(
+                            "trying to build a frame for an expression type with no frames \
+                            {}::{}::{}",
+                            cxt[self.e_idx].id(),
+                            cxt[self.e_idx].expr()[self.v_idx].id(),
+                            cxt[self.e_idx].expr()[self.v_idx][self.d_idx].param_id(),
+                        )
+                    })
+                    .to_build_tokens(self.v_idx, self.d_idx, is_own)
+                    .unwrap_or_else(|| {
+                        panic!(
+                            "trying to build a frame for some expression data with no frames \
+                            {}::{}::{}",
+                            cxt[self.e_idx].id(),
+                            cxt[self.e_idx].expr()[self.v_idx].id(),
+                            cxt[self.e_idx].expr()[self.v_idx][self.d_idx].param_id(),
+                        )
+                    });
+                let and_then = frame_expr_pair_do(quote! {
+                    (#build_frame, #next_id)
+                });
+
+                quote! {
+                    let mut #id = #id;
+                    #id.#acc_field = #fold;
+
+                    if let Some(#next_id) = #id.#iter_field.next() {
+                        #and_then
+                    } else {
+                        let #id = #id.#acc_field;
+                        #keep_going
+                    }
+                }
+            }
+
+            DataTyp::Leaf(_) | DataTyp::One(_) | DataTyp::Many(_) => {
+                // panic!(
+                //     "trying to update frame result for some non-self-rec data \
+                //                 {}::{}::{}",
+                //     cxt[self.e_idx].id(),
+                //     cxt[self.e_idx].expr()[self.v_idx].id(),
+                //     cxt[self.e_idx].expr()[self.v_idx][self.d_idx].param_id(),
+                // );
+                let blah = format!(
+                    "{}::{}::{}",
+                    cxt[self.e_idx].id(),
+                    cxt[self.e_idx].expr()[self.v_idx].id(),
+                    cxt[self.e_idx].expr()[self.v_idx][self.d_idx].param_id(),
+                );
+                quote!(todo!(#blah))
+            }
+        }
+    }
+
+    pub fn zip_handle_variant_data(
+        &self,
+        cxt: &cxt::ZipCxt,
+        is_own: IsOwn,
+        frame_expr_pair_do: impl FnOnce(TokenStream) -> TokenStream,
+        keep_going: impl FnOnce() -> TokenStream,
+    ) -> TokenStream {
+        self.zip_build_next_frame(cxt, is_own, frame_expr_pair_do, keep_going, true)
+    }
+
+    pub fn zip_build_next_frame(
+        &self,
+        cxt: &cxt::ZipCxt,
+        is_own: IsOwn,
+        frame_expr_pair_do: impl FnOnce(TokenStream) -> TokenStream,
+        keep_going: impl FnOnce() -> TokenStream,
+        with_init: bool,
+    ) -> TokenStream {
+        let id = self.param_id();
+        match self.data() {
+            DataTyp::Leaf(_) => keep_going(),
+
+            DataTyp::One(one) if one.is_self_rec() => one.extract_expr(
+                id,
+                is_own,
+                |inner| {
+                    let build_frame = cxt[self.e_idx]
+                        .frames()
+                        .expect("trying to build a frame for an expression type with no frames")
+                        .to_build_tokens(self.v_idx, self.d_idx, is_own)
+                        .expect("trying to build a frame for some expression data with no frames");
+                    frame_expr_pair_do(quote! {
+                        (#build_frame, #inner)
+                    })
+                },
+                keep_going,
+            ),
+
+            DataTyp::One(one) => {
+                debug_assert!(!one.is_self_rec());
+
+                let zip_fun = cxt[one.inner()].zip_fun_id();
+                let keep_going = keep_going();
+
+                let tokens = one.extract_expr(
+                    id,
+                    is_own,
+                    |inner| {
+                        quote! {
+                            self.#zip_fun(#inner)
+                        }
+                    },
+                    || quote!(#id),
+                );
+
+                quote! {
+                    let #id = #tokens;
+                    #keep_going
+                }
+            }
+
+            DataTyp::Many(many) => {
+                let init = if with_init {
+                    let initializer = &cxt[many.e_idx()].zipper_trait().coll_initializers()
+                        [many.e_idx()][many.c_idx()];
+                    let acc = {
+                        let init = initializer.to_call_tokens();
+                        let zip_field = cxt[many.e_idx()].zip_struct().zip_field();
+                        gen::lib::zip_do::early_return_if_not_down(quote! { #zip_field.#init })
+                    };
+                    let iter = {
+                        let iter_fun = many.iter_fun(is_own);
+                        quote! { #id.#iter_fun() }
+                    };
+                    let coll_der = gen::lib::coll_der::new(acc, iter);
+                    quote!(let mut #id = #coll_der;)
+                } else {
+                    quote!()
+                };
+
+                let next_id = rust::Id::new("fast_expr_reserved_next", gen::span());
+                let acc_field = gen::lib::coll_der::acc_field();
+                let iter_field = gen::lib::coll_der::iter_field();
+
+                if many.is_self_rec() {
+                    let keep_going = keep_going();
+                    let build_frame = cxt[self.e_idx]
+                        .frames()
+                        .expect("trying to build a frame for an expression type with no frames")
+                        .to_build_tokens(self.v_idx, self.d_idx, is_own)
+                        .expect("trying to build a frame for some expression data with no frames");
+                    let and_then = frame_expr_pair_do(quote! {
+                        (#build_frame, #next_id)
+                    });
+
+                    quote!(
+                        #init
+                        if let Some(#next_id) = #id.#iter_field.next() {
+                            #and_then
+                        } else {
+                            let #id = #id.#acc_field;
+                            #keep_going
+                        }
+                    )
+                } else {
+                    let zip_fun = cxt[many.inner()].zip_fun_id();
+                    let fold_to_down = {
+                        let folder = &cxt[many.e_idx()].zipper_trait().coll_folders()[many.e_idx()]
+                            [many.c_idx()];
+                        let fold = folder.to_call_tokens(&next_id);
+                        let zip_field = cxt[self.e_idx].zip_struct().zip_field();
+                        gen::lib::zip_do::early_return_if_not_down(quote!(#zip_field.#fold))
+                    };
+                    let keep_going = keep_going();
+                    quote!(
+                        #init
+                        while let Some(#next_id) = #id.#iter_field.next() {
+                            let #next_id = self.#zip_fun(#next_id);
+                            #id.#acc_field = #fold_to_down;
+                        }
+                        let #id = #id.#acc_field;
+                        #keep_going
+                    )
+                }
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -111,6 +357,13 @@ impl DataTyp {
             Self::Leaf(leaf) => leaf.map_rec_exprs(|idx| action(idx, false)),
             Self::One(one) => one.map_rec_exprs(|idx| action(idx, false)),
             Self::Many(many) => many.map_rec_exprs(|idx| action(idx, true)),
+        }
+    }
+
+    pub fn is_leaf(&self) -> bool {
+        match self {
+            Self::Leaf(_) => true,
+            Self::One(_) | Self::Many(_) => false,
         }
     }
 }
@@ -151,6 +404,21 @@ impl DataTyp {
             Self::Leaf(leaf) => leaf.frame_res(e_cxt, is_own),
             Self::One(one) => one.frame_res(e_cxt, is_own),
             Self::Many(many) => many.frame_res(e_cxt, is_own),
+        }
+    }
+    pub fn zip_res(&self, e_cxt: &cxt::pre::ECxt, is_own: IsOwn) -> rust::Typ {
+        match self {
+            Self::Leaf(leaf) => leaf.zip_res(e_cxt, is_own),
+            Self::One(one) => one.zip_res(e_cxt, is_own),
+            Self::Many(many) => many.zip_res(e_cxt, is_own),
+        }
+    }
+
+    pub fn inner(&self) -> Option<idx::Expr> {
+        match self {
+            Self::Leaf(_) => None,
+            Self::One(one) => Some(one.inner()),
+            Self::Many(many) => Some(many.inner()),
         }
     }
 }
@@ -207,7 +475,7 @@ pub mod front {
                     let mut path = path.segments.iter();
                     match (path.next(), path.next()) {
                         (Some(seg), None) => {
-                            if seg.ident == "Self" || cxt.get_expr(&seg.ident).is_some() {
+                            if seg.ident == "Self" || cxt.get_e_cxt(&seg.ident).is_some() {
                                 return Ok(true);
                             }
                         }
@@ -462,7 +730,7 @@ pub mod front {
             }
 
             Some(segment) => {
-                if let Some(e_cxt) = cxt.get_expr(&segment.ident) {
+                if let Some(e_cxt) = cxt.get_e_cxt(&segment.ident) {
                     use syn::PathArguments::*;
 
                     let e_idx = e_cxt.e_idx();

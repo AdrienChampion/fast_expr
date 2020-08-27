@@ -184,4 +184,44 @@ impl One {
     pub fn frame_res(&self, _e_cxt: &cxt::pre::ECxt, _is_own: IsOwn) -> rust::Typ {
         self.res_typ.clone()
     }
+    pub fn zip_res(&self, _e_cxt: &cxt::pre::ECxt, _is_own: IsOwn) -> rust::Typ {
+        let res = &self.res_typ;
+        syn::parse_quote!(Self :: #res)
+    }
+}
+
+impl One {
+    pub fn extract_expr(
+        &self,
+        slf: &rust::Id,
+        is_own: IsOwn,
+        if_some: impl FnOnce(TokenStream) -> TokenStream,
+        if_none: impl FnOnce() -> TokenStream,
+    ) -> TokenStream {
+        match &self.wrap {
+            Wrap::Plain => if_some(quote!(#slf)),
+            Wrap::Box(_) => if_some(if is_own {
+                quote!(* #slf)
+            } else {
+                quote!(&** #slf)
+            }),
+            Wrap::Ref { .. } => {
+                assert!(!is_own);
+                if_some(quote!(&** #slf))
+            }
+            Wrap::Option(_) => {
+                let as_ref = if is_own { quote!() } else { quote!(.as_ref()) };
+                let if_some = if_some(slf.to_token_stream());
+                let if_none = if_none();
+                quote! {
+                    if let Some(#slf) = #slf #as_ref {
+                        #if_some
+                    } else {
+                        let #slf = None;
+                        #if_none
+                    }
+                }
+            }
+        }
+    }
 }

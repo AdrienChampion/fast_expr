@@ -110,6 +110,14 @@ pub mod generic_param {
     pub fn from_id(id: Id) -> GenericParam {
         GenericParam::Type(param::from_id(id))
     }
+    pub fn from_lifetime(lifetime: rust::Lifetime) -> GenericParam {
+        GenericParam::Lifetime(syn::LifetimeDef {
+            attrs: vec![],
+            lifetime,
+            colon_token: None,
+            bounds: syn::punctuated::Punctuated::new(),
+        })
+    }
 }
 
 pub mod generic_arg {
@@ -138,17 +146,9 @@ pub mod lib {
         rust::typ::simple_path(path, id, None)
     }
 
-    pub fn coll_der(acc: rust::Typ, iter: rust::Typ) -> rust::Typ {
-        let path = Some(gen::lib_path());
-        let id = Id::new("CollDer", gen::span());
-        simple_path(
-            path,
-            id,
-            Some(vec![
-                generic_arg::from_typ(acc),
-                generic_arg::from_typ(iter),
-            ]),
-        )
+    pub fn coll_der(acc: &rust::Typ, iter: &rust::Typ) -> rust::Typ {
+        let coll_der = gen::lib::coll_der::instantiate(acc, iter);
+        syn::parse_quote!(#coll_der)
     }
 
     pub fn zipper(e_typ: rust::Typ) -> rust::Typ {

@@ -11,6 +11,9 @@ pub struct Variant {
 
     data: idx::DataMap<expr::Data>,
     src: rust::Variant,
+
+    zip_handler_id: rust::Id,
+    zipper_go_up_id: rust::Id,
 }
 
 implement! {
@@ -33,6 +36,10 @@ impl Variant {
     }
     pub fn data(&self) -> &idx::DataMap<expr::Data> {
         &self.data
+    }
+
+    pub fn contains_leaf_data(&self) -> bool {
+        self.data.iter().any(expr::data::Data::is_leaf)
     }
 }
 
@@ -62,6 +69,9 @@ impl Variant {
             }
         }
 
+        let zip_handler_id = gen::fun::variant_handler(cxt[e_idx].id(), &src.ident);
+        let zipper_go_up_id = gen::fun::go_up(cxt[e_idx].id(), &variant.ident);
+
         Ok(Self {
             e_idx,
             v_idx,
@@ -69,11 +79,18 @@ impl Variant {
             data,
 
             src,
+
+            zip_handler_id,
+            zipper_go_up_id,
         })
     }
 
     pub fn is_struct_like(&self) -> Option<bool> {
-        self.data.iter().next().map(|data| data.id().is_some())
+        match &self.src.fields {
+            syn::Fields::Named(_) => Some(true),
+            syn::Fields::Unnamed(_) => Some(false),
+            syn::Fields::Unit => None,
+        }
     }
 
     // pub fn frame_variants(&self) -> &idx::DataMap<Option<expr::Frame>> {
@@ -82,6 +99,13 @@ impl Variant {
     // pub fn has_frame_variants(&self) -> bool {
     //     self.frames.iter().any(Option::is_some)
     // }
+
+    pub fn zip_handler_id(&self) -> &rust::Id {
+        &self.zip_handler_id
+    }
+    pub fn zipper_go_up_id(&self) -> &rust::Id {
+        &self.zipper_go_up_id
+    }
 
     pub fn log(&self, pref: &str, trailing_comma: bool) {
         let (open, close) = match self.is_struct_like() {
@@ -121,8 +145,6 @@ impl Variant {
         stream.append_all(&self.src.attrs);
         self.src.ident.to_tokens(stream);
 
-        logln!("generating {}", self.src.ident);
-
         use syn::Fields::*;
         match &self.src.fields {
             Named(fields) => fields.brace_token.surround(stream, |stream| {
@@ -137,6 +159,78 @@ impl Variant {
         if let Some((eq_token, disc)) = &self.src.discriminant {
             eq_token.to_tokens(stream);
             disc.to_tokens(stream);
+        }
+    }
+
+    pub fn to_constructor_tokens(&self) -> TokenStream {
+        let id = self.id();
+        let data = self.data.iter().map(|data| data.param_id());
+        if self.is_struct_like().unwrap_or(false) {
+            quote! {
+                #id { #(#data ,)* }
+            }
+        } else {
+            quote! {
+                #id ( #(#data ,)* )
+            }
+        }
+    }
+}
+
+/// # Expr zipper struct codgen functions
+impl Variant {
+    pub fn zip_produce_final_res(&self, cxt: &cxt::ZipCxt) -> TokenStream {
+        let zip_field = cxt[self.e_idx].zip_struct().zip_field();
+        let go_up = &self.zipper_go_up_id;
+        let data_params = self.data.iter().map(expr::data::Data::param_id);
+        gen::lib::zip_do::new_go_up(quote! {
+            #zip_field . #go_up (
+                #( #data_params , )*
+            )
+        })
+    }
+
+    /// Builds the next frame for some data index.
+    pub fn zip_handle_variant_from(
+        &self,
+        cxt: &cxt::ZipCxt,
+        is_own: bool,
+        d_idx: idx::Data,
+    ) -> TokenStream {
+        self.data[d_idx].zip_handle_variant_data(cxt, is_own, gen::lib::zip_do::new_go_down, || {
+            let mut d_idx = d_idx;
+            d_idx.inc();
+            if d_idx < self.data.len() {
+                self.zip_handle_variant_from(cxt, is_own, d_idx)
+            } else {
+                self.zip_produce_final_res(cxt)
+            }
+        })
+    }
+
+    pub fn to_zip_handler_fn_tokens(&self, cxt: &cxt::ZipCxt, is_own: bool) -> TokenStream {
+        let e_cxt = &cxt[self.e_idx];
+
+        let fun_id = &self.zip_handler_id;
+        let out_typ = e_cxt.zip_variant_handler_out_typ(is_own);
+
+        let data_params = self.data.iter().map(|data| {
+            let param_id = data.param_id();
+            let typ = data.frame_typ(e_cxt, is_own);
+            quote! {
+                #param_id: #typ
+            }
+        });
+
+        let handle_variant = self.zip_handle_variant_from(cxt, is_own, idx::Data::zero());
+
+        quote! {
+            pub fn #fun_id (
+                &mut self,
+                #( #data_params , )*
+            ) -> #out_typ {
+                #handle_variant
+            }
         }
     }
 }

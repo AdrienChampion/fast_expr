@@ -96,6 +96,10 @@ crate::expr! {
         CountTrue(
             coll::Vec<BExpr<_>>,
         ),
+        /// Counts the number of true sub-expressions.
+        CountPositive(
+            coll::Vec<IExpr<_>>,
+        ),
     }
 }
 

@@ -2,7 +2,7 @@
 
 prelude! {}
 
-use cxt::{CollCxt, ZipStruct};
+use cxt::CollCxt;
 
 pub type ECxts = idx::ExprMap<ECxt>;
 
@@ -36,6 +36,8 @@ pub struct ECxt {
 
     /// Frame-type identifier.
     frame_typ_id: rust::Id,
+    /// Zip trait identifier.
+    zip_trait_id: rust::Id,
 
     /// Expression definition from the frontend.
     def: rust::Enum,
@@ -86,6 +88,7 @@ impl ECxt {
         let e_deps = Set::new();
 
         let frame_typ_id = gen::frame::typ_id(&def.ident);
+        let zip_trait_id = gen::trai::zipper(&def.ident);
 
         let colls = idx::CollMap::new();
 
@@ -102,29 +105,30 @@ impl ECxt {
             top_t_params,
 
             frame_typ_id,
+            zip_trait_id,
 
             def,
         })
     }
 
-    pub fn generate_deps(
+    pub fn generate_frame_info(
         cxt: &cxt::PreCxt,
         exprs: &idx::ExprMap<expr::Expr>,
-    ) -> idx::ExprMap<cxt::with_frames::ExprDeps> {
-        debug_assert_eq!(cxt.exprs().len(), exprs.len());
+    ) -> cxt::frames::Infos {
+        debug_assert_eq!(cxt.e_cxts().len(), exprs.len());
 
         let mut res: idx::ExprMap<_> = cxt
-            .exprs()
+            .e_cxts()
             .iter()
-            .map(|e_cxt| cxt::with_frames::ExprDeps::new(e_cxt))
+            .map(|e_cxt| cxt::frames::Info::new(e_cxt))
             .collect();
 
         // Used to compute the dependencies fixed-point.
         let mut known;
         let mut todo = vec![];
 
-        for (e_idx, e_cxt) in cxt.exprs().index_iter() {
-            res[e_idx].add_frame_params(e_idx, cxt.exprs());
+        for (e_idx, e_cxt) in cxt.e_cxts().index_iter() {
+            res[e_idx].add_frame_params(e_idx, cxt.e_cxts());
 
             known = Set::new();
             debug_assert!(todo.is_empty());
@@ -186,13 +190,28 @@ impl ECxt {
             }
         }
 
-        debug_assert_eq!(cxt.exprs().len(), res.len());
+        debug_assert_eq!(cxt.e_cxts().len(), res.len());
         res
     }
 
     /// Index accessor.
     pub fn e_idx(&self) -> idx::Expr {
         self.e_idx
+    }
+
+    /// Plain type of the expression.
+    pub fn plain_typ(&self) -> rust::Typ {
+        let id = self.id();
+        let (_, params, _) = self.generics().split_for_impl();
+        syn::parse_quote!(#id #params)
+    }
+    /// Plain type under a reference if asked.
+    pub fn plain_typ_for(&self, is_own: IsOwn) -> rust::Typ {
+        let mut typ = self.plain_typ();
+        if !is_own {
+            typ = rust::typ::reference(Some(gen::lifetime::expr()), typ)
+        }
+        typ
     }
 
     /// Identifier accessor.
@@ -219,6 +238,10 @@ impl ECxt {
     /// Frame-type identifier.
     pub fn frame_typ_id(&self) -> &rust::Id {
         &self.frame_typ_id
+    }
+    /// Zip trait identifier.
+    pub fn zip_trait_id(&self) -> &rust::Id {
+        &self.zip_trait_id
     }
 
     /// Collection contexts accessor.

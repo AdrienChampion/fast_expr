@@ -3,14 +3,9 @@
 prelude! {}
 
 pub mod data;
-// pub mod frame;
 pub mod variant;
 
-pub use self::{
-    data::Data,
-    // frame::Frame,
-    variant::Variant,
-};
+pub use self::{data::Data, variant::Variant};
 
 pub type Exprs = idx::ExprMap<Expr>;
 
@@ -116,18 +111,57 @@ impl Expr {
         Ok(v_idx)
     }
 
-    pub fn log(&self, pref: &str) {
-        logln!(
-            "{}expr {}{} {{",
-            pref,
-            self.id(),
-            self.generics.to_token_stream()
-        );
-        let sub_pref = &format!("{}    ", pref);
-        for variant in &self.variants {
-            variant.log(sub_pref, true)
+    pub fn zip_handle_frames(
+        &self,
+        cxt: &cxt::ZipCxt,
+        res: &rust::Id,
+        is_own: bool,
+    ) -> TokenStream {
+        let frames = cxt[self.e_idx]
+            .frames()
+            .expect("trying to build frame handler for frame-less expression type");
+        let match_branches = frames
+            .frames()
+            .map(|frame| {
+                let v_idx = frame.v_idx();
+                let d_idx = frame.d_idx();
+
+                let variant = &self.variants[v_idx];
+                let data = &variant.data();
+
+                let frame_deconstruction =
+                    frames.to_build_tokens(frame.v_idx(), frame.d_idx(), is_own);
+
+                let handle = data[d_idx].zip_handle_frame(
+                    cxt,
+                    res,
+                    is_own,
+                    gen::lib::zip_do::new_go_down,
+                    || {
+                        let mut d_idx = d_idx;
+                        d_idx.inc();
+                        if d_idx < data.len() {
+                            variant.zip_handle_variant_from(cxt, is_own, d_idx)
+                        } else {
+                            variant.zip_produce_final_res(cxt)
+                        }
+                    },
+                );
+
+                quote! {
+                    #frame_deconstruction => {
+                        #handle
+                    }
+                }
+            })
+            .flatten();
+
+        let match_sink = frames.to_sink_match_case_tokens();
+
+        quote! {
+            #(#match_branches)*
+            #match_sink
         }
-        logln!("{}}}", pref);
     }
 }
 
@@ -153,6 +187,16 @@ impl Expr {
                     punct.to_tokens(stream)
                 }
             })
+        })
+    }
+
+    pub fn to_variant_constructors_tokens<'a>(
+        &'a self,
+    ) -> impl Iterator<Item = (idx::Variant, TokenStream)> + 'a {
+        let id = self.id();
+        self.variants.index_iter().map(move |(v_idx, variant)| {
+            let cons = variant.to_constructor_tokens();
+            (v_idx, quote!(#id :: #cons))
         })
     }
 }
