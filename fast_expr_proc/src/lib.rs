@@ -11,7 +11,10 @@ use fast_expr_gen::syn;
 pub fn expr(stream: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let top = syn::parse_macro_input!(stream as front::Top);
 
-    match internal(top) {
+    let res = fast_expr_gen::generate_context(top)
+        .map(|top| proc_macro::TokenStream::from(top.to_token_stream()));
+
+    match res {
         Ok(res) => res,
         Err(e) => {
             logln!("code generation failed...");
@@ -20,9 +23,4 @@ pub fn expr(stream: proc_macro::TokenStream) -> proc_macro::TokenStream {
             proc_macro::TokenStream::from(e.to_compile_error())
         }
     }
-}
-
-fn internal(top: front::Top) -> Res<proc_macro::TokenStream> {
-    let top = fast_expr_gen::generate_context(top)?;
-    Ok(proc_macro::TokenStream::from(top.to_token_stream()))
 }

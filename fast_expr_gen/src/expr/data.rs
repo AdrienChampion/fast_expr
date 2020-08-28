@@ -255,7 +255,7 @@ impl Data {
                         (#build_frame, #inner)
                     })
                 },
-                keep_going,
+                // keep_going,
             ),
 
             DataTyp::One(one) => {
@@ -272,7 +272,7 @@ impl Data {
                             self.#zip_fun(#inner)
                         }
                     },
-                    || quote!(#id),
+                    // || quote!(#id),
                 );
 
                 quote! {
@@ -748,24 +748,38 @@ pub mod front {
                     let e_idx = e_cxt.e_idx();
 
                     match &segment.arguments {
-                        None => Resolved::Plain {
+                        None if e_cxt.generics().params.is_empty() => Resolved::Plain {
                             wrap: one::Wrap::Plain,
                             rec: Rec::Expr {
                                 e_idx,
                                 args: vec![],
                             },
                         },
+                        None => bail!(on(
+                            segment,
+                            "this expression type takes a specification trait, \
+                            expected inference parameter `_`"
+                        )),
+
                         AngleBracketed(args) => {
                             let args = if is_infer(args.args.iter()) {
                                 e_cxt.top_t_params().clone()
+                            } else if args.args.is_empty() && e_cxt.generics().params.is_empty() {
+                                vec![]
                             } else {
-                                args.args.iter().cloned().collect()
+                                let empty_msg = if e_cxt.generics().params.is_empty() {
+                                    " or nothing"
+                                } else {
+                                    ""
+                                };
+                                bail!(on(segment, "expected inference parameter `_`{}", empty_msg))
                             };
                             Resolved::Plain {
                                 wrap: one::Wrap::Plain,
                                 rec: Rec::Expr { e_idx, args },
                             }
                         }
+
                         Parenthesized(paren) => {
                             bail!(on(paren, "unexpected parenthesized arguments"))
                         }

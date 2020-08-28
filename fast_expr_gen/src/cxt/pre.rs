@@ -50,16 +50,52 @@ impl ECxt {
         let res_typ = rust::typ::plain(res_typ_id.clone(), None);
 
         let generics = {
+            macro_rules! spec_trait_list {
+                ($str_pref:expr) => {{
+                    let specs = cxt.specs();
+                    if !specs.is_empty() {
+                        let mut blah = $str_pref.to_string();
+                        let mut pref = "";
+                        for id in cxt.specs().keys() {
+                            blah.push_str(pref);
+                            pref = ", ";
+                            blah.push('`');
+                            blah.push_str(&id.to_string());
+                            blah.push('`');
+                        }
+                        blah
+                    } else {
+                        "".into()
+                    }
+                }};
+            }
+
             let mut params = def.generics.params.iter();
             match (params.next(), params.next()) {
                 (Some(rust::GenericParam::Type(maybe_spec)), None) => {
                     if let Some(spec) = cxt.get_spec(&maybe_spec.ident) {
                         Some(spec.generics().clone())
                     } else {
-                        None
+                        bail!(on(
+                            maybe_spec,
+                            "unknown specification trait{}",
+                            spec_trait_list!("; available specification traits: ")
+                        ))
                     }
                 }
-                _ => None,
+                (Some(param), None) => bail!(on(
+                    param,
+                    "only specification traits are allowed here{}",
+                    spec_trait_list!(", such as "),
+                )),
+                (None, _next_next) => {
+                    debug_assert_eq!(_next_next, None);
+                    None
+                }
+                (Some(_), Some(_)) => bail!(on(
+                    &def.ident,
+                    "expression types can only have one specification-trait type parameter"
+                )),
             }
         };
 

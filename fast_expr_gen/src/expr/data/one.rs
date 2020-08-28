@@ -6,6 +6,8 @@ static BOX: StaticTypPath = static_typ_path! {
     pref: &["std", "boxed"],
     id: "Box",
 };
+
+#[allow(dead_code)]
 static OPTION: StaticTypPath = static_typ_path! {
     pref: &["std", "option"],
     id: "Option",
@@ -19,7 +21,7 @@ pub enum Wrap {
         and_token: syn::token::And,
         lifetime: rust::Lifetime,
     },
-    Option(rust::Span),
+    // Option(rust::Span),
 }
 impl Wrap {
     pub const PREF: &'static str = "wrap";
@@ -27,8 +29,8 @@ impl Wrap {
     pub fn from_id(id: &rust::Id) -> Res<Self> {
         if id == BOX.id {
             Ok(Wrap::Box(id.span()))
-        } else if id == OPTION.id {
-            Ok(Wrap::Option(id.span()))
+        // } else if id == OPTION.id {
+        //     Ok(Wrap::Option(id.span()))
         } else {
             bail!(on(id, "unknown wrapper type"))
         }
@@ -38,7 +40,7 @@ impl Wrap {
         match self {
             Self::Plain => inner,
             Self::Box(span) => BOX.to_typ(*span, Some(vec![rust::GenericArg::Type(inner)])),
-            Self::Option(span) => OPTION.to_typ(*span, Some(vec![rust::GenericArg::Type(inner)])),
+            // Self::Option(span) => OPTION.to_typ(*span, Some(vec![rust::GenericArg::Type(inner)])),
             Self::Ref {
                 and_token,
                 lifetime,
@@ -196,7 +198,7 @@ impl One {
         slf: &rust::Id,
         is_own: IsOwn,
         if_some: impl FnOnce(TokenStream) -> TokenStream,
-        if_none: impl FnOnce() -> TokenStream,
+        // if_none: impl FnOnce() -> TokenStream,
     ) -> TokenStream {
         match &self.wrap {
             Wrap::Plain => if_some(quote!(#slf)),
@@ -208,20 +210,19 @@ impl One {
             Wrap::Ref { .. } => {
                 assert!(!is_own);
                 if_some(quote!(&** #slf))
-            }
-            Wrap::Option(_) => {
-                let as_ref = if is_own { quote!() } else { quote!(.as_ref()) };
-                let if_some = if_some(slf.to_token_stream());
-                let if_none = if_none();
-                quote! {
-                    if let Some(#slf) = #slf #as_ref {
-                        #if_some
-                    } else {
-                        let #slf = None;
-                        #if_none
-                    }
-                }
-            }
+            } // Wrap::Option(_) => {
+              //     let as_ref = if is_own { quote!() } else { quote!(.as_ref()) };
+              //     let if_some = if_some(slf.to_token_stream());
+              //     let if_none = if_none();
+              //     quote! {
+              //         if let Some(#slf) = #slf #as_ref {
+              //             #if_some
+              //         } else {
+              //             let #slf = None;
+              //             #if_none
+              //         }
+              //     }
+              // }
         }
     }
 }

@@ -39,6 +39,10 @@ pub type PreCxt = Cxt<pre::ECxt>;
 pub type FrameCxt = Cxt<frames::ECxt>;
 pub type ZipCxt = Cxt<zip::ECxt>;
 
+pub type PreTop = Top<PreCxt, expr::Exprs>;
+pub type FrameTop = Top<FrameCxt, ()>;
+pub type ZipTop = Top<ZipCxt, ()>;
+
 #[derive(Debug, Clone)]
 pub struct Cxt<ECxt> {
     /// Specification traits.
@@ -123,6 +127,10 @@ impl PreCxt {
         }
 
         Ok(slf)
+    }
+
+    pub fn specs(&self) -> &Map<rust::Id, Spec> {
+        &self.specs
     }
 
     pub fn log(&self, _pref: impl Display + Copy) {
@@ -307,7 +315,7 @@ pub struct Top<Cxt, Exprs> {
     pub exprs: Exprs,
 }
 
-impl Top<PreCxt, expr::Exprs> {
+impl PreTop {
     pub fn new_pre(top: front::Top) -> Res<Self> {
         let mut cxt = Cxt::new(top)?;
         let exprs = {
@@ -331,14 +339,14 @@ impl Top<PreCxt, expr::Exprs> {
     }
 }
 
-impl Top<FrameCxt, ()> {
+impl FrameTop {
     pub fn generate_zip_structs(self) -> Top<ZipCxt, ()> {
         let cxt = self.cxt.generate_zip();
         Top { cxt, exprs: () }
     }
 }
 
-impl Top<ZipCxt, ()> {
+impl ZipTop {
     pub fn new(top: front::Top) -> Res<Self> {
         Top::new_pre(top).map(|pre_top| pre_top.generate_frames().generate_zip_structs())
     }
@@ -374,7 +382,7 @@ impl Top<ZipCxt, ()> {
     }
 }
 
-impl ToTokens for Top<ZipCxt, ()> {
+impl ToTokens for ZipTop {
     fn to_tokens(&self, stream: &mut TokenStream) {
         self.to_expr_enum_tokens(stream);
 
@@ -382,7 +390,7 @@ impl ToTokens for Top<ZipCxt, ()> {
     }
 }
 
-impl Top<ZipCxt, ()> {
+impl ZipTop {
     #[cfg(not(feature = "dbg_log"))]
     pub fn dbg_log_to_file(&self) {}
     #[cfg(feature = "dbg_log")]
