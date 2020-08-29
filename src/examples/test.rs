@@ -26,7 +26,7 @@ pub trait IntSpec {
     type IOp;
 }
 
-crate::expr! {
+crate::fast_expr! {
     spec trait Defaults<BSpec, ISpec>
     where
         BSpec: BoolSpec,

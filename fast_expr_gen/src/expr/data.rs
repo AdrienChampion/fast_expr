@@ -757,7 +757,7 @@ pub mod front {
                         },
                         None => bail!(on(
                             segment,
-                            "this expression type takes a specification trait, \
+                            "this expression type takes type parameters, \
                             expected inference parameter `_`"
                         )),
 

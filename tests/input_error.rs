@@ -9,27 +9,6 @@ fn check_error<T>(res: Result<T, impl std::fmt::Display>, msg: impl AsRef<str>) 
 }
 
 #[test]
-fn wrong_spec_trait() {
-    let tokens = quote! {
-        spec trait ESpec<Var, Cst, UOp> {}
-
-        pub enum Expr<Spec> {
-            Var(Spec::Var),
-            Cst(Spec::Cst),
-            UApp {
-                op: Spec::UOp,
-                arg: wrap::Box<Self>,
-            },
-        }
-    };
-
-    check_error(
-        from_stream(tokens),
-        "unknown specification trait; available specification traits: `ESpec`",
-    )
-}
-
-#[test]
 fn wrong_too_many_params() {
     let tokens = quote! {
         spec trait ESpec<Var, UOp> {}
@@ -46,7 +25,7 @@ fn wrong_too_many_params() {
 
     check_error(
         from_stream(tokens),
-        "expression types can only have one specification-trait type parameter",
+        "expression types that use a specification-trait cannot have other type parameters",
     )
 }
 
@@ -71,7 +50,7 @@ fn no_sub_expr_param() {
 
     check_error(
         from_stream(tokens),
-        "this expression type takes a specification trait, expected inference parameter `_`",
+        "this expression type takes type parameters, expected inference parameter `_`",
     );
 }
 

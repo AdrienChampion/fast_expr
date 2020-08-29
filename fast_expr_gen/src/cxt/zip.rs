@@ -72,11 +72,6 @@ impl ECxt {
 impl ECxt {
     pub fn fun_inspect_self_def_tokens(&self, is_own: IsOwn) -> TokenStream {
         let id = &self.self_ids().inspect_fun;
-        let expr_lt = if is_own {
-            None
-        } else {
-            Some(gen::lifetime::expr())
-        };
         let e_typ = self.plain_typ_for(is_own);
         let res_typ = {
             let res = self.res_typ_id();
@@ -86,7 +81,7 @@ impl ECxt {
         let def = gen::lib::zip_do::new_go_down(quote!(expr));
 
         quote! {
-            fn #id <#expr_lt> (&mut self, expr: #e_typ) -> #res_typ {
+            fn #id (&mut self, expr: #e_typ) -> #res_typ {
                 #def
             }
         }

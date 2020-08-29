@@ -124,6 +124,13 @@ impl ZipStruct {
                 rust::GenericParam::Const(const_param) => const_param.ident.to_token_stream(),
             });
 
+            let expr_lt = if is_own {
+                None
+            } else {
+                let lt = gen::lifetime::expr();
+                Some(quote!(#lt ,))
+            };
+
             // let tokens = quote! {
             //     #stepper_t_param : #zip_trait<
             //         #( #expr_params, )* #(#dep_typ_constraints)*
@@ -134,7 +141,7 @@ impl ZipStruct {
                 .predicates
                 .push(syn::parse_quote! {
                     #stepper_t_param : #zip_trait<
-                        #( #expr_params, )* #(#dep_typ_constraints)*
+                        #expr_lt #( #expr_params, )* #(#dep_typ_constraints)*
                     >
                 });
 

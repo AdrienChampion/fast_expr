@@ -50,52 +50,45 @@ impl ECxt {
         let res_typ = rust::typ::plain(res_typ_id.clone(), None);
 
         let generics = {
-            macro_rules! spec_trait_list {
-                ($str_pref:expr) => {{
-                    let specs = cxt.specs();
-                    if !specs.is_empty() {
-                        let mut blah = $str_pref.to_string();
-                        let mut pref = "";
-                        for id in cxt.specs().keys() {
-                            blah.push_str(pref);
-                            pref = ", ";
-                            blah.push('`');
-                            blah.push_str(&id.to_string());
-                            blah.push('`');
-                        }
-                        blah
-                    } else {
-                        "".into()
-                    }
-                }};
-            }
+            // macro_rules! spec_trait_list {
+            //     ($str_pref:expr) => {{
+            //         let specs = cxt.specs();
+            //         if !specs.is_empty() {
+            //             let mut blah = $str_pref.to_string();
+            //             let mut pref = "";
+            //             for id in cxt.specs().keys() {
+            //                 blah.push_str(pref);
+            //                 pref = ", ";
+            //                 blah.push('`');
+            //                 blah.push_str(&id.to_string());
+            //                 blah.push('`');
+            //             }
+            //             blah
+            //         } else {
+            //             "".into()
+            //         }
+            //     }};
+            // }
 
             let mut params = def.generics.params.iter();
-            match (params.next(), params.next()) {
-                (Some(rust::GenericParam::Type(maybe_spec)), None) => {
-                    if let Some(spec) = cxt.get_spec(&maybe_spec.ident) {
-                        Some(spec.generics().clone())
-                    } else {
-                        bail!(on(
-                            maybe_spec,
-                            "unknown specification trait{}",
-                            spec_trait_list!("; available specification traits: ")
-                        ))
-                    }
-                }
-                (Some(param), None) => bail!(on(
-                    param,
-                    "only specification traits are allowed here{}",
-                    spec_trait_list!(", such as "),
+            let first_param: Option<Option<&cxt::Spec>> = params.next().map(|param| match param {
+                rust::GenericParam::Type(maybe_spec) => cxt.get_spec(&maybe_spec.ident),
+                _ => None,
+            });
+
+            match (first_param, params.next()) {
+                (Some(Some(spec)), None) => Some(spec.generics().clone()),
+                (None, None) | (Some(None), _) => None,
+
+                (Some(Some(_)), Some(param)) => bail!(on(
+                    &param,
+                    "expression types that use a specification-trait \
+                    cannot have other type parameters"
                 )),
-                (None, _next_next) => {
-                    debug_assert_eq!(_next_next, None);
-                    None
+
+                (None, Some(_)) => {
+                    unreachable!("parameter iterator yielded `None`, and then `Some`")
                 }
-                (Some(_), Some(_)) => bail!(on(
-                    &def.ident,
-                    "expression types can only have one specification-trait type parameter"
-                )),
             }
         };
 

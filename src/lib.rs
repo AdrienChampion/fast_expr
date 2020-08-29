@@ -1,8 +1,9 @@
 //! Fast expr.
 
+#[cfg(any(test, feature = "examples"))]
 pub mod examples;
 
-pub use fast_expr_proc::expr;
+pub use fast_expr_proc::expr as fast_expr;
 
 /// An empty enumeration.
 pub enum Empty {}

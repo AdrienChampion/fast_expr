@@ -15,9 +15,14 @@ version = "0.1.0"
 authors = ["Adrien Champion <adrien.champion@email.com>"]
 edition = "2018"
 
+[package.metadata.docs.rs]
+rustdoc-args = [ "--features examples" ]
+
 [dependencies]
 fast_expr_gen = { path = "./fast_expr_gen" }
 fast_expr_proc = { path = "./fast_expr_proc" }
 
 [features]
+default = []
 dbg_log = [ "fast_expr_gen/dbg_log" ]
+examples = []

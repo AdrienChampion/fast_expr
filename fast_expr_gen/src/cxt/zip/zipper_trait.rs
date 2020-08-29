@@ -56,7 +56,6 @@ pub struct VariantHandler {
     v_idx: idx::Variant,
 
     go_up_id: rust::Id,
-    go_up_lt_param: Option<rust::Lifetime>,
     go_up_params: idx::DataMap<FnParam>,
     go_up_res: rust::Typ,
 }
@@ -65,11 +64,6 @@ impl VariantHandler {
         let v_idx = variant.v_idx();
 
         let go_up_id = variant.zipper_go_up_id().clone();
-        let go_up_lt_param = if variant.contains_leaf_data() {
-            Some(gen::lifetime::expr())
-        } else {
-            None
-        };
         let go_up_params = variant
             .data()
             .iter()
@@ -85,7 +79,6 @@ impl VariantHandler {
             v_idx,
 
             go_up_id,
-            go_up_lt_param,
             go_up_params,
             go_up_res,
         }
@@ -98,13 +91,8 @@ impl VariantHandler {
             .iter()
             .map(|param| param.to_tokens(is_own));
         let res = &self.go_up_res;
-        let lt_opt = if is_own {
-            None
-        } else {
-            self.go_up_lt_param.as_ref()
-        };
         quote! {
-            fn #id <#lt_opt> (&mut self, #(#params,)* ) -> #res;
+            fn #id (&mut self, #(#params,)* ) -> #res;
         }
     }
 }
@@ -194,13 +182,8 @@ impl CollFolder {
                 quote!(Self::#res_typ),
             )
         };
-        let lt = if is_own {
-            None
-        } else {
-            Some(gen::lifetime::expr())
-        };
         quote! {
-            fn #id <#lt> (
+            fn #id (
                 &mut self,
                 #( #params , )*
             ) -> #zip_do;
@@ -298,13 +281,8 @@ impl CollInitializer {
                 quote!(Self::#res_typ),
             )
         };
-        let lt = if is_own {
-            None
-        } else {
-            Some(gen::lifetime::expr())
-        };
         quote! {
-            fn #id <#lt> (
+            fn #id (
                 &mut self,
                 #( #params , )*
             ) -> #zip_do;
@@ -324,7 +302,8 @@ impl CollInitializer {
 pub struct ZipperTrait {
     e_idx: idx::Expr,
     id: rust::Id,
-    generics: rust::Generics,
+    own_generics: rust::Generics,
+    ref_generics: rust::Generics,
 
     assoc_typs: Vec<rust::Id>,
 
@@ -337,7 +316,20 @@ impl ZipperTrait {
         let e_cxt = &cxt[e_idx];
 
         let id = e_cxt.zip_trait_id().clone();
-        let generics = e_cxt.generics().clone();
+        let own_generics = e_cxt.generics().clone();
+        let ref_generics = {
+            // Add the expression lifetime if needed.
+            let mut gen = own_generics.clone();
+
+            let params_tail =
+                std::mem::replace(&mut gen.params, syn::punctuated::Punctuated::new());
+            gen.params.push(rust::typ::generic_param::from_lifetime(
+                gen::lifetime::expr(),
+            ));
+            gen.params.extend(params_tail);
+
+            gen
+        };
 
         let assoc_typs = e_cxt
             .fp_e_deps()
@@ -395,13 +387,22 @@ impl ZipperTrait {
         Self {
             e_idx,
             id,
-            generics,
+            own_generics,
+            ref_generics,
 
             assoc_typs,
 
             variant_handlers,
             initializers,
             folders,
+        }
+    }
+
+    pub fn generics(&self, is_own: IsOwn) -> &rust::Generics {
+        if is_own {
+            &self.own_generics
+        } else {
+            &self.ref_generics
         }
     }
 
@@ -419,7 +420,7 @@ impl ZipperTrait {
 impl ZipperTrait {
     pub fn to_tokens(&self, cxt: &cxt::ZipCxt, is_own: IsOwn) -> TokenStream {
         let id = &self.id;
-        let (params, _, where_clause) = self.generics.split_for_impl();
+        let (params, _, where_clause) = self.generics(is_own).split_for_impl();
         let assoc_typs = &self.assoc_typs;
 
         let handlers = self
