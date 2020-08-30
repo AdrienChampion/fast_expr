@@ -143,13 +143,13 @@ impl ECxt {
     pub fn generate_frame_info(
         cxt: &cxt::PreCxt,
         exprs: &idx::ExprMap<expr::Expr>,
-    ) -> cxt::frames::Infos {
+    ) -> cxt::frame::Infos {
         debug_assert_eq!(cxt.e_cxts().len(), exprs.len());
 
         let mut res: idx::ExprMap<_> = cxt
             .e_cxts()
             .iter()
-            .map(|e_cxt| cxt::frames::Info::new(e_cxt))
+            .map(|e_cxt| cxt::frame::Info::new(e_cxt))
             .collect();
 
         // Used to compute the dependencies fixed-point.

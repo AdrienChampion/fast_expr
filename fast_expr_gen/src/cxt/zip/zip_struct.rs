@@ -11,7 +11,7 @@ pub struct ZipField {
     ref_typ: rust::Typ,
 }
 impl ZipField {
-    pub fn new(e_cxt: &cxt::frames::ECxt) -> Option<Self> {
+    pub fn new(e_cxt: &cxt::frame::ECxt) -> Option<Self> {
         e_cxt.frames().map(|frames| {
             let e_idx = e_cxt.e_idx();
             let id = gen::ZipIds::stack_field(e_cxt.e_id());

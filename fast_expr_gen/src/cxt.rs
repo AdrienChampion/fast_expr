@@ -1,8 +1,90 @@
-//! Parsing context.
+//! Parsing contexts.
+//!
+//! Structurally, a *context* has three levels:
+//!
+//! - [`Top`][top] is the top-level structure containing everything;
+//! - [`Cxt`][cxt] contains the specification traits, some info about expressions, and most
+//!   importantly an [`idx::ExprMap`][expr map] of expression contexts.
+//! - expression contexts.
+//!
+//! The first two levels are polymorphic in the kind of expression context they handle. There are
+//! three kinds of expression contexts, corresponding to the three steps towards code generation
+//!
+//! - [pre](#pre-context): for basic parsing and checks,
+//! - [frame](#frame-context): contains frame-related info, and
+//! - [zip](#zip-context): contains everything codegen needs, in particular zip/zipper-related info.
+//!
+//! # Pre Context
+//!
+//! > Relevant module: [`pre`][pre mod].
+//!
+//! The first kind of expression context constructed is [`pre::ECxt`][pre ecxt]. It contains very
+//! limited information about the expression, its main goal is to construct the [`Expr`][expr]s from
+//! the input of the macro and check them. Once this is done, fast_expr cannot fail any more due to
+//! bad user input.
+//!
+//! The associated [`Cxt`][cxt] is [`PreCxt`][pre cxt], and the associated [`Top`][top] is
+//! [`PreTop`][pre top]. The latter, when creating itself, creates the [`PreCxt`][pre cxt] and then
+//! the [Expr][expr]s, and stores.
+//!
+//! # Frame Context
+//!
+//! > Relevant module: [`frame`][frame mod].
+//!
+//! The second step is to generate frame-related information, which requires inspecting the
+//! [`Expr`][expr]s using information from the [`pre::ECxt`][pre cxt]s, to create
+//! [`frame::ECxt`][frame ecxt]s. This information is represented by [`frame::Info`][frame info],
+//! and constructed by [`pre::ECxt::generate_frame_info`][gen frame info].
+//!
+//! Once all the frame information for each expression context is generated, the [`PreCxt`][pre cxt]
+//! turns itself `into` a [`FrameCxt`][frame cxt] by creating each [`frame::ECxt`][frame ecxt]s from
+//! a [`pre::ECxt`][pre ecxt] and the corresponding frame info and [`Expr`][expr]. Note that,
+//! contrary to [`pre::ECxt`][pre ecxt], [`frame::ECxt`][frame ecxt]s store the corresponding
+//! [`Expr`][expr] structure. Therefore the [`FrameTop`][frame top] resulting from this operation
+//! does not contain the [`Expr`][expr]s directly anymore, as they are store in the expression
+//! contexts below.
+//!
+//! # Zip Context
+//!
+//! > Relevant module: [`zip`][zip mod].
+//!
+//! The third and last step is to generate zip/zipper-related information, heavily relying on the
+//! frame information computed at the previous step. The workflow is similar, we first generate zip
+//! information ([`zip::Info`][zip info]) for each [`frame::ECxt`][frame ecxt] using
+//! [`frame::ECxt::generate_zip_info`][gen zip info]. Then, the [`FrameCxt`] will turn itself `into`
+//! a [`ZipCxt`] by creating each [`zip::ECxt`][zip ecxt] from a [`frame::ECxt`][frame ecxt] and the
+//! corresponding zip info.
+//!
+//! At top-level, the [`ZipTop`][zip top] created stores the [`ZipCxt`][zip cxt] and implements
+//! [`quote`]'s [`ToTokens`] which generates the whole code.
+//!
+//! [pre mod]: ./pre
+//! [frame mod]: ./frame
+//! [zip mod]: ./zip
+//! [top]: ./struct.Top.html
+//! [pre top]: ./type.PreTop.html
+//! [frame top]: ./type.FrameTop.html
+//! [zip top]: ./type.ZipTop.html
+//! [cxt]: ./struct.Cxt.html
+//! [pre cxt]: ./type.PreCxt.html
+//! [frame cxt]: ./type.FrameCxt.html
+//! [zip cxt]: ./type.FrameCxt.html
+//! [pre ecxt]: ./pre/struct.ECxt.html
+//! [frame ecxt]: ./frame/struct.ECxt.html
+//! [zip ecxt]: ./zip/struct.ECxt.html
+//! [frame info]: ./frame/struct.Info.html
+//! [zip info]: ./zip/struct.Info.html
+//! [gen frame info]: ./pre/struct.ECxt.html#method.generate_frame_info
+//! [gen zip info]: ./frame/struct.ECxt.html#method.generate_zip_info
+//! [expr]: ../expr/struct.Expr.html
+//! [expr map]: ../prelude/idx/struct.ExprMap.html
+//!
+//! [`quote`]: https://crates.io/crates/quote
+//! [`ToTokens`]: https://docs.rs/quote/1.0.7/quote/trait.ToTokens.html
 
 prelude! {}
 
-pub mod frames;
+pub mod frame;
 pub mod pre;
 pub mod zip;
 
@@ -36,7 +118,7 @@ impl Spec {
 }
 
 pub type PreCxt = Cxt<pre::ECxt>;
-pub type FrameCxt = Cxt<frames::ECxt>;
+pub type FrameCxt = Cxt<frame::ECxt>;
 pub type ZipCxt = Cxt<zip::ECxt>;
 
 pub type PreTop = Top<PreCxt, expr::Exprs>;
@@ -188,7 +270,7 @@ impl PreCxt {
                 |(((e_idx, pre_e_cxt), (_e_idx, frame_info)), (__e_idx, expr))| {
                     assert_eq!(e_idx, _e_idx);
                     assert_eq!(e_idx, __e_idx);
-                    frames::ECxt::new(pre_e_cxt, frame_info, expr)
+                    frame::ECxt::new(pre_e_cxt, frame_info, expr)
                 },
             )
             .collect();
@@ -204,7 +286,7 @@ impl PreCxt {
 
 impl FrameCxt {
     pub fn generate_zip(self) -> ZipCxt {
-        let zip_info = frames::ECxt::generate_zip_info(&self);
+        let zip_info = frame::ECxt::generate_zip_info(&self);
 
         debug_assert_eq!(self.e_cxts.len(), zip_info.len());
 

@@ -23,7 +23,7 @@ impl Info {
 
 #[derive(Debug, Clone)]
 pub struct ECxt {
-    cxt: cxt::frames::ECxt,
+    cxt: cxt::frame::ECxt,
 
     zip_struct: ZipStruct,
     zipper_trait: ZipperTrait,
@@ -32,7 +32,7 @@ pub struct ECxt {
 }
 implement! {
     impl ECxt {
-        Deref<cxt::frames::ECxt>, DerefMut {
+        Deref<cxt::frame::ECxt>, DerefMut {
             field: cxt
         }
     }
@@ -40,7 +40,7 @@ implement! {
 
 impl ECxt {
     pub fn new(
-        cxt: cxt::frames::ECxt,
+        cxt: cxt::frame::ECxt,
         Info {
             zip_struct,
             zipper_trait,

@@ -9,7 +9,7 @@ pub struct FnParam {
     ref_typ: rust::Typ,
 }
 impl FnParam {
-    pub fn from_data(e_cxt: &cxt::frames::ECxt, data: &expr::Data) -> Self {
+    pub fn from_data(e_cxt: &cxt::frame::ECxt, data: &expr::Data) -> Self {
         let id = gen::fun::param::data_param(
             data.d_id()
                 .map(Either::Left)
