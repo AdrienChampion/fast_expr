@@ -68,8 +68,9 @@ use fast_expr_gen::syn;
 /// `fast_expr` requires you to prefix wrappers and collections with a special prefix. Here are the
 /// wrappers/collections supported and how to write them, with `E` some expression type.
 ///
-/// | type | `fast_expr` syntax |
-/// |:----:|:------------------:|
+/// | type | `fast_expr` syntax | notes |
+/// |:----:|:------------------:|:------|
+/// | `E` | `E` | beware that your types must be well-formed |
 /// | `std::box::Box<E>` | `wrap::Box<E>` |
 /// | `std::vec::Vec<E>` | `coll::Vec<E>` |
 /// | `std::collections::HashSet<E>` | `coll::HashSet<E>` |
@@ -95,6 +96,7 @@ use fast_expr_gen::syn;
 /// # fn main() {}
 /// ```
 ///
+/// > **NB**: note that nested wrappers and/or collections are currently not supported.
 ///
 ///
 ///
@@ -102,7 +104,8 @@ use fast_expr_gen::syn;
 ///
 ///
 ///
-/// ## Expression Specification (Type Parameters)
+///
+/// ## Specification Traits (Expression Type Parameters)
 ///
 /// Expression types can have type parameters, but they are quite constrained. Crucially, a group of
 /// *mutually-recursive* expressions **must all have the same type parameters**. Note in particular
@@ -127,6 +130,10 @@ use fast_expr_gen::syn;
 /// # use fast_expr_proc::fast_expr;
 /// fast_expr! {
 /// # #![fast_expr(ref_gen = false, own_gen = false)]
+///     pub enum Expr<BOp, IRel, IOp> {
+///         B(BExpr<_>),
+///         I(IExpr<_>),
+///     }
 ///     pub enum BExpr<BOp, IRel, IOp> {
 ///         Cst(bool),
 ///         Id(String),
@@ -143,6 +150,122 @@ use fast_expr_gen::syn;
 /// }
 /// # fn main() {}
 /// ```
+///
+/// > Note that in `Expr` and in `IExpr::Ite`, some expression types appear without a
+/// > wrapper/collection. This is supported by `fast_expr`, but you need to make sure the types are
+/// > well-formed since Rust still needs to compile them. Which is the case here.
+///
+/// Now, if you have many expression types this can become tedious fast. Also, you may want to have
+/// constraints over these type parameters, further increasing the verbosity. As as example, let's
+/// have some traits that gather the three type parameters above.
+///
+/// ```rust
+/// # use fast_expr_proc::fast_expr;
+/// pub trait BoolSpec {
+///     type BOp;
+///     type IRel;
+/// }
+/// pub trait IntSpec {
+///     type IOp;
+/// }
+/// fast_expr! {
+/// # #![fast_expr(ref_gen = false, own_gen = false)]
+///     pub enum Expr<BSpec, ISpec>
+///     where
+///         BSpec: BoolSpec,
+///         ISpec: IntSpec,
+///     {
+///         B(BExpr<_>),
+///         I(IExpr<_>),
+///     }
+///     pub enum BExpr<BSpec, ISpec>
+///     where
+///         BSpec: BoolSpec,
+///         ISpec: IntSpec,
+///     {
+///         Cst(bool),
+///         Id(String),
+///         App { op: BSpec::BOp, args: coll::Vec<Self> },
+///         Ite { cnd: wrap::Box<Self>, thn: wrap::Box<Self>, els: wrap::Box<Self> },
+///         IRel { rel: BSpec::IRel, args: coll::Vec<IExpr<_>> },
+///     }
+///     pub enum IExpr<BSpec, ISpec>
+///     where
+///         BSpec: BoolSpec,
+///         ISpec: IntSpec,
+///     {
+///         Cst(isize),
+///         Id(String),
+///         App { op: ISpec::IOp, args: coll::Vec<Self> },
+///         Ite { cnd: BExpr<_>, thn: wrap::Box<Self>, els: wrap::Box<Self> },
+///     }
+/// }
+/// # fn main() {}
+/// ```
+///
+/// We can make this process less redundant (and thus more maintainable) by declaring a *spec
+/// trait*. A spec trait is a special `fast_expr` construct that factors out expression type
+/// parameters. The syntax of a spec trait is:
+///
+/// ```rust,compile_fail
+/// spec trait SpecId<...>
+/// where
+///     ...
+/// {}
+/// ```
+///
+/// This simply aggregates some type parameters and a where-clause, and allows refering to them as
+/// `SpecId` (here, the name can be anything you want) in expression type declarations. More
+/// precisely, writing an expression type as `pub enum Expr<SpecId> { ... }` means that `Expr` has
+/// the same type parameters and where-clause as `SpecId`.
+///
+/// Let's rewrite our example using a specification trait.
+///
+/// ```rust
+/// # use fast_expr_proc::fast_expr;
+/// pub trait BoolSpec {
+///     type BOp;
+///     type IRel;
+/// }
+/// pub trait IntSpec {
+///     type IOp;
+/// }
+/// fast_expr! {
+/// # #![fast_expr(ref_gen = false, own_gen = false)]
+///     spec trait ESpec<BSpec, ISpec>
+///     where
+///         BSpec: BoolSpec,
+///         ISpec: IntSpec,
+///     {}
+///
+///     pub enum Expr<ESpec> {
+///         B(BExpr<_>),
+///         I(IExpr<_>),
+///     }
+///     pub enum BExpr<ESpec> {
+///         Cst(bool),
+///         Id(String),
+///         App { op: BSpec::BOp, args: coll::Vec<Self> },
+///         Ite { cnd: wrap::Box<Self>, thn: wrap::Box<Self>, els: wrap::Box<Self> },
+///         IRel { rel: BSpec::IRel, args: coll::Vec<IExpr<_>> },
+///     }
+///     pub enum IExpr<ESpec> {
+///         Cst(isize),
+///         Id(String),
+///         App { op: ISpec::IOp, args: coll::Vec<Self> },
+///         Ite { cnd: BExpr<_>, thn: wrap::Box<Self>, els: wrap::Box<Self> },
+///     }
+/// }
+/// # fn main() {}
+/// ```
+///
+/// Thanks to specification traits, modifying the type parameters / constraints of any group of
+/// mutually-recursive expression types consists in modifying one list of type parameters /
+/// constraints (that of the specification trait), and possibly the variants impacted by that
+/// change (which is not avoidable anyway).
+///
+///
+///
 ///
 ///
 ///
