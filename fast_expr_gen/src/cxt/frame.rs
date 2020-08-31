@@ -402,8 +402,10 @@ impl VFrames {
 
         let do_it = e_cxt.expr().zip_handle_frames(cxt, &res_var, is_own);
 
+        let vis = cxt.conf().secret_item_vis();
+
         quote! {
-            pub fn #id(&mut self, #res_var: #res_typ, #frame_var: #frame_typ) -> #out_typ {
+            #vis fn #id(&mut self, #res_var: #res_typ, #frame_var: #frame_typ) -> #out_typ {
                 match #frame_var {
                     #do_it
                 }
@@ -465,7 +467,7 @@ impl ECxt {
         self.frames.generics(is_own)
     }
 
-    pub fn frame_enum_tokens(&self, is_own: IsOwn) -> TokenStream {
+    pub fn frame_enum_tokens(&self, cxt: &impl cxt::FrameCxtLike, is_own: IsOwn) -> TokenStream {
         let frames = if let Some(frames) = self.frames() {
             frames
         } else {
@@ -478,11 +480,13 @@ impl ECxt {
         let (frame_generics, _, where_clause) = generics.split_for_impl();
         let variants = frames.frames().map(|frame| frame.def(is_own));
         let sink_arg = frames.frame_sink_arg(is_own);
-        let sink = rust::typ::lib::sink(sink_arg);
+        let sink = cxt.lib_gen().sink_instantiate(sink_arg);
         let sink_variant_id = gen::frame::sink_variant_id();
 
+        let vis = cxt.conf().secret_item_vis();
+
         quote! {
-            pub enum #frame_id #frame_generics #where_clause {
+            #vis enum #frame_id #frame_generics #where_clause {
                 #(#variants ,)*
                 #sink_variant_id(#sink),
             }

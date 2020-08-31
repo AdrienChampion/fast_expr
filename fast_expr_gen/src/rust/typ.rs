@@ -134,12 +134,6 @@ pub mod generic_arg {
 pub mod lib {
     use super::*;
 
-    pub fn sink(typ: Typ) -> Typ {
-        let path = Some(gen::lib_path());
-        let id = Id::new("Sink", gen::span());
-        rust::typ::simple_path(path, id, Some(vec![generic_arg::from_typ(typ)]))
-    }
-
     pub fn empty() -> rust::Typ {
         let path = Some(gen::lib_path());
         let id = Id::new("Empty", gen::span());

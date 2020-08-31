@@ -242,11 +242,16 @@ Zipper over owned expressions.\
 #[derive(Debug, Clone)]
 pub struct Lib {
     path: rust::Id,
+    internal_path: rust::Id,
 }
 impl Lib {
     pub fn new(conf: &conf::Conf) -> Self {
         let path = conf.fast_expr_name.deref().clone();
-        Self { path }
+        let internal_path = Id::new("internal", span());
+        Self {
+            path,
+            internal_path,
+        }
     }
 
     fn sink_id() -> Id {
@@ -254,8 +259,9 @@ impl Lib {
     }
     pub fn sink_instantiate(&self, tt: impl ToTokens) -> TokenStream {
         let path = &self.path;
+        let internal = &self.internal_path;
         let sink = Self::sink_id();
-        quote! { #path :: #sink < #tt > }
+        quote! { #path :: #internal :: #sink < #tt > }
     }
     pub fn sink_match_empty(&self, id: &rust::Id) -> TokenStream {
         quote! { (_, #id) }
@@ -266,8 +272,9 @@ impl Lib {
     }
     pub fn empty_instantiate(&self) -> TokenStream {
         let path = &self.path;
+        let internal = &self.internal_path;
         let empty = Self::empty_id();
-        quote! { #path :: #empty }
+        quote! { #path :: #internal :: #empty }
     }
 
     fn coll_der_id() -> Id {

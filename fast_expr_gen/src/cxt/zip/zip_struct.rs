@@ -41,7 +41,7 @@ impl ZipField {
     pub fn to_field_tokens(&self, is_own: IsOwn) -> TokenStream {
         let id = &self.id;
         let typ = self.typ(is_own);
-        syn::parse_quote!(pub #id: std::vec::Vec<#typ>)
+        syn::parse_quote!(#id: std::vec::Vec<#typ>)
     }
 }
 
@@ -228,11 +228,13 @@ impl ZipStruct {
         let sink_id = &self.sink_id;
         let sink_typ = self.sink_typ(is_own);
 
+        let vis = cxt.conf().secret_item_vis();
+
         quote! {
             pub struct #id #params #where_clause {
-                pub #step_field: #stepper_typ,
-                #(#stacks ,)*
-                pub #sink_id: #sink_typ,
+                #vis #step_field: #stepper_typ,
+                #(#vis #stacks ,)*
+                #vis #sink_id: #sink_typ,
             }
         }
     }

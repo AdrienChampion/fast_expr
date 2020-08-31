@@ -124,6 +124,7 @@ pub type ZipCxt = Cxt<zip::ECxt>;
 pub trait PreCxtLike {
     fn get_pre_e_cxt(&self, e_idx: idx::Expr) -> &pre::ECxt;
     fn lib_gen(&self) -> &gen::Lib;
+    fn conf(&self) -> &conf::Conf;
 }
 impl PreCxtLike for PreCxt {
     fn get_pre_e_cxt(&self, e_idx: idx::Expr) -> &pre::ECxt {
@@ -131,6 +132,9 @@ impl PreCxtLike for PreCxt {
     }
     fn lib_gen(&self) -> &gen::Lib {
         &self.lib_gen
+    }
+    fn conf(&self) -> &conf::Conf {
+        &self.conf
     }
 }
 impl PreCxtLike for FrameCxt {
@@ -140,6 +144,9 @@ impl PreCxtLike for FrameCxt {
     fn lib_gen(&self) -> &gen::Lib {
         &self.lib_gen
     }
+    fn conf(&self) -> &conf::Conf {
+        &self.conf
+    }
 }
 impl PreCxtLike for ZipCxt {
     fn get_pre_e_cxt(&self, e_idx: idx::Expr) -> &pre::ECxt {
@@ -148,11 +155,15 @@ impl PreCxtLike for ZipCxt {
     fn lib_gen(&self) -> &gen::Lib {
         &self.lib_gen
     }
+    fn conf(&self) -> &conf::Conf {
+        &self.conf
+    }
 }
 
 pub trait FrameCxtLike {
     fn get_frame_e_cxt(&self, e_idx: idx::Expr) -> &frame::ECxt;
     fn lib_gen(&self) -> &gen::Lib;
+    fn conf(&self) -> &conf::Conf;
 }
 impl FrameCxtLike for FrameCxt {
     fn get_frame_e_cxt(&self, e_idx: idx::Expr) -> &frame::ECxt {
@@ -161,6 +172,9 @@ impl FrameCxtLike for FrameCxt {
     fn lib_gen(&self) -> &gen::Lib {
         &self.lib_gen
     }
+    fn conf(&self) -> &conf::Conf {
+        &self.conf
+    }
 }
 impl FrameCxtLike for ZipCxt {
     fn get_frame_e_cxt(&self, e_idx: idx::Expr) -> &frame::ECxt {
@@ -168,6 +182,9 @@ impl FrameCxtLike for ZipCxt {
     }
     fn lib_gen(&self) -> &gen::Lib {
         &self.lib_gen
+    }
+    fn conf(&self) -> &conf::Conf {
+        &self.conf
     }
 }
 
@@ -482,6 +499,7 @@ impl PreTop {
             }
             exprs
         };
+        cxt.conf().check(&exprs)?;
         Ok(Self { cxt, exprs })
     }
 
@@ -511,6 +529,12 @@ impl ZipTop {
     }
 
     pub fn to_zip_mod_tokens_for(&self, stream: &mut TokenStream, is_own: IsOwn) {
+        if is_own && !*self.cxt.conf.own_gen {
+            return;
+        } else if !is_own && !*self.cxt.conf.ref_gen {
+            return;
+        }
+
         let (zip_doc, zip_mod) = (gen::doc::module::zip(is_own), gen::module::zip(is_own));
 
         let tokens = self

@@ -233,8 +233,10 @@ impl Variant {
 
         let handle_variant = self.zip_handle_variant_from(cxt, is_own, idx::Data::zero());
 
+        let vis = cxt.conf().secret_item_vis();
+
         quote! {
-            pub fn #fun_id (
+            #vis fn #fun_id (
                 &mut self,
                 #( #data_params , )*
             ) -> #out_typ {

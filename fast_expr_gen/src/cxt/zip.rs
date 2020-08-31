@@ -90,9 +90,11 @@ impl ECxt {
 
 impl ECxt {
     pub fn zip_mod_tokens(&self, cxt: &cxt::ZipCxt, is_own: IsOwn) -> TokenStream {
-        let mut tokens = self.frame_enum_tokens(is_own);
-        tokens.extend(self.zip_trait_tokens(cxt, is_own));
-        tokens.extend(self.zip_struct_tokens(cxt, is_own));
+        let mut tokens = self.frame_enum_tokens(cxt, is_own);
+        if *self.e_conf().zip_gen {
+            tokens.extend(self.zip_trait_tokens(cxt, is_own));
+            tokens.extend(self.zip_struct_tokens(cxt, is_own));
+        }
         tokens
     }
 
@@ -140,8 +142,10 @@ impl ECxt {
                     }
                 });
 
+        let vis = cxt.conf().secret_item_vis();
+
         quote! {
-            pub fn #fn_id(&mut self, #expr_var: #expr_typ) -> #out_typ {
+            #vis fn #fn_id(&mut self, #expr_var: #expr_typ) -> #out_typ {
                 match #expr_var {
                     #(#match_cases ,)*
                 }

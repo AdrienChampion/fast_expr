@@ -109,16 +109,34 @@ impl Parse for LitOrId {
     }
 }
 
+pub struct Conf {
+    pub fields: Punctuated<ConfField, syn::token::Comma>,
+}
+impl Conf {
+    pub fn fast_expr_attr_key() -> syn::Path {
+        syn::parse_quote! { fast_expr }
+    }
+}
+impl Parse for Conf {
+    fn parse(input: ParseStream) -> Res<Self> {
+        let content;
+        syn::parenthesized!(content in input);
+        let fields = Punctuated::parse_terminated(&content)?;
+
+        Ok(Self { fields })
+    }
+}
+
 pub struct ConfField {
     pub id: rust::Id,
-    pub val: Option<(syn::token::Colon, LitOrId)>,
+    pub val: Option<(syn::token::Eq, LitOrId)>,
 }
 impl ConfField {
-    pub fn into_bool_opt(self) -> Res<(rust::Span, Option<bool>)> {
+    pub fn into_bool(self) -> Res<(rust::Span, bool)> {
         let val = match self.val {
-            None => None,
-            Some((_, LitOrId::Lit(rust::Lit::Bool(b)))) => Some(b.value),
-            Some((_, val)) => bail!(@(val.span(), "expected boolean or nothing")),
+            None => true,
+            Some((_, LitOrId::Lit(rust::Lit::Bool(b)))) => b.value,
+            Some((_, val)) => bail!(@(val.span(), "expected boolean or nothing (meaning `true`)")),
         };
         Ok((self.id.span(), val))
     }
@@ -144,18 +162,5 @@ impl Parse for ConfField {
         };
 
         Ok(Self { id, val })
-    }
-}
-
-pub struct Conf {
-    pub fields: Punctuated<ConfField, syn::token::Comma>,
-}
-impl Parse for Conf {
-    fn parse(input: ParseStream) -> Res<Self> {
-        let _: keyword::fast_expr = input.parse()?;
-
-        let fields = Punctuated::parse_terminated(input)?;
-
-        Ok(Self { fields })
     }
 }

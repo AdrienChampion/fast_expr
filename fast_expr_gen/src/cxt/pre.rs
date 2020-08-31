@@ -268,6 +268,10 @@ impl ECxt {
         &self.e_deps
     }
 
+    pub fn e_conf(&self) -> &conf::EConf {
+        &self.e_conf
+    }
+
     /// Result type identifier.
     pub fn res_typ_id(&self) -> &rust::Id {
         &self.res_typ_id
