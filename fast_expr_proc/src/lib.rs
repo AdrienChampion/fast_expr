@@ -8,10 +8,9 @@ use fast_expr_gen::syn;
 
 /// The whole point.
 ///
-/// Roughly-speaking, this macro takes one or more (mutually-)recursive enums definitions. In the
-/// following we will call these types *expression types*, and their values *expressions*. This
-/// macro then generates the expression type definitions (almost untouched) and, by default, two
-/// modules:
+/// Roughly-speaking, this macro takes one or more (mutually-)recursive enum definitions. In the
+/// following we will call these types *expression types*, and their values *expressions*. The macro
+/// generates the expression type definitions (almost untouched) and, by default, two modules:
 ///
 /// - `zip_ref`, for zipping over expression references, and
 /// - `zip_own`, for zipping over owned expression.
@@ -21,6 +20,18 @@ use fast_expr_gen::syn;
 /// - an `ExprZipper` trait, used to write zippers over your expressions, and
 /// - an `ExprZip` struct that leverages the zipper traits to actually zip over an owned expression
 ///   (`zip_own`) or an expression reference (`zip_ref`).
+///
+///
+/// Below is discussed how to
+///
+/// - write [expression type definitions](#expression-type-definitions), and in particular
+///   [recursive variants](#recursive-variants) and [specification traits (type
+///   parameters)](#specification-traits-expression-type-parameters);
+/// - [customize the macro's behavior](#configuration), by acting on the [global
+///   configuration](#global-configuration) or on [expression-specific
+///   configurations](#local-configuration).
+///
+///
 ///
 ///
 ///
@@ -33,6 +44,21 @@ use fast_expr_gen::syn;
 /// # Expression Type Definitions
 ///
 /// This macro has several deviations compared to pure-Rust enum definition.
+///
+///
+///
+///
+///
+///
+///
+///
+///
+///
+///
+///
+///
+///
+///
 ///
 /// ## Recursive Variants
 ///
@@ -85,7 +111,7 @@ use fast_expr_gen::syn;
 /// # pub type Id = ();
 /// # pub type Val = ();
 /// fast_expr! {
-/// # #![fast_expr(ref_gen = false, own_gen = false)]
+/// # #![fast_expr(name = fast_expr_gen)]
 ///     pub enum Expr {
 ///         Cst(Val),
 ///         Id(Id),
@@ -129,7 +155,7 @@ use fast_expr_gen::syn;
 /// ```rust
 /// # use fast_expr_proc::fast_expr;
 /// fast_expr! {
-/// # #![fast_expr(ref_gen = false, own_gen = false)]
+/// # #![fast_expr(name = fast_expr_gen)]
 ///     pub enum Expr<BOp, IRel, IOp> {
 ///         B(BExpr<_>),
 ///         I(IExpr<_>),
@@ -169,7 +195,7 @@ use fast_expr_gen::syn;
 ///     type IOp;
 /// }
 /// fast_expr! {
-/// # #![fast_expr(ref_gen = false, own_gen = false)]
+/// # #![fast_expr(name = fast_expr_gen)]
 ///     pub enum Expr<BSpec, ISpec>
 ///     where
 ///         BSpec: BoolSpec,
@@ -231,7 +257,7 @@ use fast_expr_gen::syn;
 ///     type IOp;
 /// }
 /// fast_expr! {
-/// # #![fast_expr(ref_gen = false, own_gen = false)]
+/// # #![fast_expr(name = fast_expr_gen)]
 ///     spec trait ESpec<BSpec, ISpec>
 ///     where
 ///         BSpec: BoolSpec,
@@ -278,7 +304,23 @@ use fast_expr_gen::syn;
 ///
 /// This macro's behavior can be configured in two ways.
 ///
+///
+///
+///
+///
+///
+///
+///
+///
+///
+///
+///
+///
+///
+///
 /// ## Global Configuration
+///
+/// > Examples available [below](#examples-configuration).
 ///
 /// To act on the global behavior, start the macro's input with **inner** attributes of the form
 /// `#![fast_expr(<options>)]`, where `<options>` is a comma-separated list (trailing comma allowed)
@@ -307,7 +349,25 @@ use fast_expr_gen::syn;
 ///   
 ///   (`own_gen` is equivalent to `own_gen = true`)
 ///
+///
+///
+///
+///
+///
+///
+///
+///
+///
+///
+///
+///
+///
+///
+///
+///
 /// ## Local Configuration
+///
+/// > Examples available [below](#examples-configuration).
 ///
 /// The second kind of configuration is local to a single expression type, written as **outer**
 /// attributes for the expression type definition. These have form `#[fast_expr(<options>)]`, where
@@ -320,6 +380,92 @@ use fast_expr_gen::syn;
 ///   (default `true` if the global configuration has Self or nothing as the top expression type)
 ///   
 ///   (`zip_gen` is equivalent to `zip_gen = true`)
+///
+///
+///
+///
+///
+///
+///
+///
+///
+/// ## Examples (Configuration)
+///
+/// ```rust
+/// # use fast_expr_proc::fast_expr;
+/// pub trait BoolSpec {
+///     type BOp;
+///     type IRel;
+/// }
+/// pub trait IntSpec {
+///     type IOp;
+/// }
+///
+/// # pub mod fast_expr {
+/// #     pub use fast_expr_gen::*;
+/// # }
+/// # pub mod fast_expr_gen {}
+/// /// Pretending we renamed `fast_expr` to `fexpr`.
+/// pub mod fexpr {
+///     pub use crate::fast_expr::*;
+/// }
+///
+/// fast_expr! {
+///     #![fast_expr(
+///         // use `fexpr` to refer to fast_expr instead of `fast_expr`
+///         name = fexpr,
+///         // only generate zip-struct and zipper-trait for `Expr`
+///         top = Expr,
+///         // do not generate the code for zipping over owned expressions
+///         own_gen = false,
+///     )]
+///     spec trait ESpec<BSpec, ISpec>
+///     where
+///         BSpec: BoolSpec,
+///         ISpec: IntSpec,
+///     {}
+///
+///     pub enum Expr<ESpec> {
+///         B(BExpr<_>),
+///         I(IExpr<_>),
+///     }
+///
+///     #[fast_expr(
+///         // override `top` and do generate zip-code for this expression
+///         zip_gen,
+///         // equivalent to `zip_gen = true`
+///     )]
+///     pub enum BExpr<ESpec> {
+///         Cst(bool),
+///         Id(String),
+///         App { op: BSpec::BOp, args: coll::Vec<Self> },
+///         Ite { cnd: wrap::Box<Self>, thn: wrap::Box<Self>, els: wrap::Box<Self> },
+///         IRel { rel: BSpec::IRel, args: coll::Vec<IExpr<_>> },
+///     }
+///
+///     pub enum IExpr<ESpec> {
+///         Cst(isize),
+///         Id(String),
+///         App { op: ISpec::IOp, args: coll::Vec<Self> },
+///         Ite { cnd: BExpr<_>, thn: wrap::Box<Self>, els: wrap::Box<Self> },
+///     }
+/// }
+/// fn main() {
+/// #     #[allow(dead_code)]
+///     use zip_ref::{
+///         ExprZip, ExprZipper,
+///         // Generated because of the override for zip-generation on `BExpr`.
+///         BExprZip, BExprZipper,
+///         // // Not generated because of global `top = Expr`, does not exist.
+///         // IExprZip, IExprZipper,
+///     };
+///
+///     // // Not generated because of global `own_gen = false`, does not exist.
+///     // use zip_own::*;
+///
+///     // ...
+/// }
+/// ```
 #[proc_macro]
 pub fn fast_expr(stream: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let top = syn::parse_macro_input!(stream as front::Top);
