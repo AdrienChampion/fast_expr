@@ -9,7 +9,7 @@ pub mod typ;
 pub use proc_macro2::Span;
 pub use syn::{
     Attribute, Field, GenericArgument as GenericArg, GenericParam, Generics, Ident as Id,
-    ItemEnum as Enum, ItemFn as Fn, ItemTrait as Trait, Lifetime, Path, Type as Typ,
+    ItemEnum as Enum, ItemFn as Fn, ItemTrait as Trait, Lifetime, Lit, Path, Type as Typ,
     TypeParam as TypParam, Variant,
 };
 

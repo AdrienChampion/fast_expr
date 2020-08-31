@@ -140,7 +140,7 @@ impl Expr {
                     cxt,
                     res,
                     is_own,
-                    gen::lib::zip_do::new_go_down,
+                    |input| cxt.lib_gen().zip_do_new_go_down(input),
                     || {
                         let mut d_idx = d_idx;
                         d_idx.inc();
@@ -160,7 +160,7 @@ impl Expr {
             })
             .flatten();
 
-        let match_sink = frames.to_sink_match_case_tokens();
+        let match_sink = frames.to_sink_match_case_tokens(cxt);
 
         quote! {
             #(#match_branches)*

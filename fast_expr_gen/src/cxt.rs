@@ -121,12 +121,67 @@ pub type PreCxt = Cxt<pre::ECxt>;
 pub type FrameCxt = Cxt<frame::ECxt>;
 pub type ZipCxt = Cxt<zip::ECxt>;
 
+pub trait PreCxtLike {
+    fn get_pre_e_cxt(&self, e_idx: idx::Expr) -> &pre::ECxt;
+    fn lib_gen(&self) -> &gen::Lib;
+}
+impl PreCxtLike for PreCxt {
+    fn get_pre_e_cxt(&self, e_idx: idx::Expr) -> &pre::ECxt {
+        &self[e_idx]
+    }
+    fn lib_gen(&self) -> &gen::Lib {
+        &self.lib_gen
+    }
+}
+impl PreCxtLike for FrameCxt {
+    fn get_pre_e_cxt(&self, e_idx: idx::Expr) -> &pre::ECxt {
+        &self[e_idx]
+    }
+    fn lib_gen(&self) -> &gen::Lib {
+        &self.lib_gen
+    }
+}
+impl PreCxtLike for ZipCxt {
+    fn get_pre_e_cxt(&self, e_idx: idx::Expr) -> &pre::ECxt {
+        &self[e_idx]
+    }
+    fn lib_gen(&self) -> &gen::Lib {
+        &self.lib_gen
+    }
+}
+
+pub trait FrameCxtLike {
+    fn get_frame_e_cxt(&self, e_idx: idx::Expr) -> &frame::ECxt;
+    fn lib_gen(&self) -> &gen::Lib;
+}
+impl FrameCxtLike for FrameCxt {
+    fn get_frame_e_cxt(&self, e_idx: idx::Expr) -> &frame::ECxt {
+        &self[e_idx]
+    }
+    fn lib_gen(&self) -> &gen::Lib {
+        &self.lib_gen
+    }
+}
+impl FrameCxtLike for ZipCxt {
+    fn get_frame_e_cxt(&self, e_idx: idx::Expr) -> &frame::ECxt {
+        &self[e_idx]
+    }
+    fn lib_gen(&self) -> &gen::Lib {
+        &self.lib_gen
+    }
+}
+
 pub type PreTop = Top<PreCxt, expr::Exprs>;
 pub type FrameTop = Top<FrameCxt, ()>;
 pub type ZipTop = Top<ZipCxt, ()>;
 
 #[derive(Debug, Clone)]
 pub struct Cxt<ECxt> {
+    /// Configuration.
+    conf: conf::Conf,
+    /// Handles fast_expr-lib-related codegen.
+    lib_gen: gen::Lib,
+
     /// Specification traits.
     specs: Map<rust::Id, Spec>,
 
@@ -149,9 +204,41 @@ implement! {
     }
 }
 
+impl<ECxt> Cxt<ECxt> {
+    /// Global configuration.
+    pub fn conf(&self) -> &conf::Conf {
+        &self.conf
+    }
+    /// Codegen for fast_expr types.
+    pub fn lib_gen(&self) -> &gen::Lib {
+        &self.lib_gen
+    }
+
+    /// Retrieves the context of a expression, if any.
+    pub fn get_e_cxt(&self, id: &rust::Id) -> Option<&ECxt> {
+        self.expr_id_map.get(id).map(|idx| &self[*idx])
+    }
+
+    pub fn zip_ids(&self) -> &gen::ZipIds {
+        &self.zip_ids
+    }
+
+    pub fn e_cxts(&self) -> &idx::ExprMap<ECxt> {
+        &self.e_cxts
+    }
+
+    /// Retrieves the specification of an identifier, if any.
+    pub fn get_spec(&self, id: &rust::Id) -> Option<&Spec> {
+        self.specs.get(id)
+    }
+}
+
 impl PreCxt {
-    fn _new() -> Self {
+    fn _new(conf: conf::Conf) -> Self {
+        let lib_gen = gen::Lib::new(&conf);
         Self {
+            conf,
+            lib_gen,
             specs: Map::new(),
             zip_ids: gen::ZipIds::default(),
             expr_id_map: Map::new(),
@@ -173,7 +260,7 @@ impl PreCxt {
 
         Ok(())
     }
-    fn push_expr(&mut self, expr: rust::Enum) -> Res<idx::Expr> {
+    fn push_expr(&mut self, expr: rust::Enum, e_conf: conf::EConf) -> Res<idx::Expr> {
         let new_span = expr.ident.span();
         let e_idx = self.e_cxts.next_index();
 
@@ -186,7 +273,7 @@ impl PreCxt {
             )
         }
 
-        let _e_idx = self.e_cxts.push(pre::ECxt::new(self, e_idx, expr)?);
+        let _e_idx = self.e_cxts.push(pre::ECxt::new(self, e_idx, expr, e_conf)?);
         debug_assert_eq!(e_idx, _e_idx);
 
         Ok(e_idx)
@@ -198,14 +285,14 @@ impl PreCxt {
     /// [`finalize`]d.
     ///
     /// [`finalize`]: #method.finalize
-    fn new(front::Top { specs, exprs }: front::Top) -> Res<Self> {
-        let mut slf = Self::_new();
+    fn new(front::Top { specs, exprs, conf }: front::Top) -> Res<Self> {
+        let mut slf = Self::_new(conf);
 
         for spec in specs {
             slf.push_spec(spec)?
         }
-        for expr in &exprs {
-            let _ = slf.push_expr(expr.clone())?;
+        for (e_conf, expr) in exprs {
+            let _ = slf.push_expr(expr, e_conf)?;
         }
 
         Ok(slf)
@@ -276,6 +363,8 @@ impl PreCxt {
             .collect();
 
         Cxt {
+            conf: self.conf,
+            lib_gen: self.lib_gen,
             specs: self.specs,
             zip_ids: self.zip_ids,
             expr_id_map: self.expr_id_map,
@@ -301,31 +390,13 @@ impl FrameCxt {
             .collect();
 
         Cxt {
+            conf: self.conf,
+            lib_gen: self.lib_gen,
             specs: self.specs,
             zip_ids: self.zip_ids,
             expr_id_map: self.expr_id_map,
             e_cxts,
         }
-    }
-}
-
-impl<ECxt> Cxt<ECxt> {
-    /// Retrieves the context of a expression, if any.
-    pub fn get_e_cxt(&self, id: &rust::Id) -> Option<&ECxt> {
-        self.expr_id_map.get(id).map(|idx| &self[*idx])
-    }
-
-    pub fn zip_ids(&self) -> &gen::ZipIds {
-        &self.zip_ids
-    }
-
-    pub fn e_cxts(&self) -> &idx::ExprMap<ECxt> {
-        &self.e_cxts
-    }
-
-    /// Retrieves the specification of an identifier, if any.
-    pub fn get_spec(&self, id: &rust::Id) -> Option<&Spec> {
-        self.specs.get(id)
     }
 }
 

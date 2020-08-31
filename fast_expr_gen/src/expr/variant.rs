@@ -187,7 +187,7 @@ impl Variant {
         let zip_field = &cxt.zip_ids().self_step_field();
         let go_up = &self.zipper_go_up_id;
         let data_params = self.data.iter().map(expr::data::Data::param_id);
-        gen::lib::zip_do::new_go_up(quote! {
+        cxt.lib_gen().zip_do_new_go_up(quote! {
             #zip_field . #go_up (
                 #( #data_params , )*
             )
@@ -201,26 +201,31 @@ impl Variant {
         is_own: bool,
         d_idx: idx::Data,
     ) -> TokenStream {
-        self.data[d_idx].zip_handle_variant_data(cxt, is_own, gen::lib::zip_do::new_go_down, || {
-            let mut d_idx = d_idx;
-            d_idx.inc();
-            if d_idx < self.data.len() {
-                self.zip_handle_variant_from(cxt, is_own, d_idx)
-            } else {
-                self.zip_produce_final_res(cxt)
-            }
-        })
+        self.data[d_idx].zip_handle_variant_data(
+            cxt,
+            is_own,
+            |input| cxt.lib_gen().zip_do_new_go_down(input),
+            || {
+                let mut d_idx = d_idx;
+                d_idx.inc();
+                if d_idx < self.data.len() {
+                    self.zip_handle_variant_from(cxt, is_own, d_idx)
+                } else {
+                    self.zip_produce_final_res(cxt)
+                }
+            },
+        )
     }
 
     pub fn to_zip_handler_fn_tokens(&self, cxt: &cxt::ZipCxt, is_own: bool) -> TokenStream {
         let e_cxt = &cxt[self.e_idx];
 
         let fun_id = &self.zip_handler_id;
-        let out_typ = e_cxt.zip_variant_handler_out_typ(is_own);
+        let out_typ = e_cxt.zip_variant_handler_out_typ(cxt, is_own);
 
         let data_params = self.data.iter().map(|data| {
             let param_id = data.param_id();
-            let typ = data.frame_typ(e_cxt, is_own);
+            let typ = data.frame_typ(cxt, is_own);
             quote! {
                 #param_id: #typ
             }

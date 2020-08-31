@@ -70,15 +70,15 @@ impl ECxt {
 }
 
 impl ECxt {
-    pub fn fun_inspect_self_def_tokens(&self, is_own: IsOwn) -> TokenStream {
+    pub fn fun_inspect_self_def_tokens(&self, cxt: &cxt::ZipCxt, is_own: IsOwn) -> TokenStream {
         let id = &self.self_ids().inspect_fun;
         let e_typ = self.plain_typ_for(is_own);
         let res_typ = {
             let res = self.res_typ_id();
             let res = quote!(Self::#res);
-            gen::lib::zip_do::instantiate(&e_typ, &e_typ, &res)
+            cxt.lib_gen().zip_do_instantiate(&e_typ, &e_typ, &res)
         };
-        let def = gen::lib::zip_do::new_go_down(quote!(expr));
+        let def = cxt.lib_gen().zip_do_new_go_down(quote!(expr));
 
         quote! {
             fn #id (&mut self, expr: #e_typ) -> #res_typ {
@@ -106,7 +106,7 @@ impl ECxt {
 }
 
 impl ECxt {
-    pub fn zip_variant_handler_out_typ(&self, is_own: IsOwn) -> TokenStream {
+    pub fn zip_variant_handler_out_typ(&self, cxt: &cxt::ZipCxt, is_own: IsOwn) -> TokenStream {
         let expr = self.plain_typ_for(is_own);
         let res = self.res_typ_id();
 
@@ -114,16 +114,16 @@ impl ECxt {
             let frame_typ = frames.plain_typ(is_own);
             quote!( ( #frame_typ, #expr ) )
         } else {
-            gen::lib::empty::instantiate()
+            cxt.lib_gen().empty_instantiate()
         };
-        gen::lib::zip_do::instantiate(&down, &expr, &res)
+        cxt.lib_gen().zip_do_instantiate(&down, &expr, &res)
     }
 
     pub fn to_zip_handler_fn_tokens(&self, cxt: &cxt::ZipCxt, is_own: IsOwn) -> TokenStream {
         let fn_id = &self.self_ids().handle_expr_fun;
         let expr_var = &cxt.zip_ids().expr_var;
         let expr_typ = self.plain_typ_for(is_own);
-        let out_typ = self.zip_variant_handler_out_typ(is_own);
+        let out_typ = self.zip_variant_handler_out_typ(cxt, is_own);
 
         let match_cases =
             self.expr()
@@ -212,7 +212,7 @@ impl ECxt {
             // the expression variant in practice.
             let get_user_command = {
                 let inspect = &&self.self_ids().inspect_fun;
-                let down_and_then = gen::lib::zip_do::down_and_then();
+                let down_and_then = cxt.lib_gen().zip_do_down_and_then();
                 let handle_expr = &self.self_ids().handle_expr_fun;
 
                 quote! {
@@ -234,7 +234,7 @@ impl ECxt {
                 let new_expr = &cxt.zip_ids().new_expr_var;
                 let drain_stack = self.zip_fun_drain_stack(cxt, stack_field);
 
-                let zip_do_cases = gen::lib::zip_do::match_cases(
+                let zip_do_cases = cxt.lib_gen().zip_do_match_cases(
                     // Down, get a new frame and an expression to go down into.
                     quote! { (frame, expr) },
                     quote! {{
@@ -311,7 +311,7 @@ impl ECxt {
 
             // Handle the expression, and then handle the result. Expression has no frames, the down
             // variant is inhabited.
-            let zip_do_cases = gen::lib::zip_do::match_cases(
+            let zip_do_cases = cxt.lib_gen().zip_do_match_cases(
                 // Down is inhabited.
                 quote! { empty },
                 quote! {{
@@ -386,7 +386,7 @@ impl ECxt {
         let (res, new_res) = (&cxt.zip_ids().res_var, &cxt.zip_ids().new_res_var);
         let drain_stack = self.zip_fun_drain_stack(cxt, stack_field);
 
-        let frame_zip_do_cases = gen::lib::zip_do::match_cases(
+        let frame_zip_do_cases = cxt.lib_gen().zip_do_match_cases(
             // Down, get a new frame and a new expression.
             quote! { (#frame, #new_expr) },
             quote! {{

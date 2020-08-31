@@ -156,8 +156,8 @@ impl Many {
         self.c_idx
     }
 
-    pub fn acc_t_param<'a>(&self, e_cxt: &'a cxt::pre::ECxt) -> &'a rust::Typ {
-        e_cxt.colls()[self.c_idx].acc_t_param()
+    pub fn acc_t_param<'a>(&self, cxt: &'a impl cxt::PreCxtLike) -> &'a rust::Typ {
+        cxt.get_pre_e_cxt(self.e_idx()).colls()[self.c_idx].acc_t_param()
     }
 
     pub fn iter_typ(&self, is_own: IsOwn, typ: &rust::Typ) -> rust::Typ {
@@ -182,7 +182,7 @@ impl Many {
         true
     }
 
-    pub fn frame_typ(&self, _e_cxt: &cxt::pre::ECxt, is_own: IsOwn) -> rust::Typ {
+    pub fn frame_typ(&self, _cxt: &impl cxt::PreCxtLike, is_own: IsOwn) -> rust::Typ {
         let typ = self.typ.clone();
         if is_own {
             typ
@@ -190,9 +190,9 @@ impl Many {
             rust::typ::to_expr_ref(typ)
         }
     }
-    pub fn frame_der(&self, e_cxt: &cxt::pre::ECxt, is_own: IsOwn) -> Option<rust::Typ> {
+    pub fn frame_der(&self, cxt: &impl cxt::PreCxtLike, is_own: IsOwn) -> Option<rust::Typ> {
         let spec = self.coll.spec();
-        let acc = self.acc_t_param(e_cxt);
+        let acc = self.acc_t_param(cxt);
 
         let mut args = vec![];
         if !is_own {
@@ -203,13 +203,14 @@ impl Many {
         let iter = spec
             .iter(is_own)
             .to_typ(rust::Span::mixed_site(), Some(args));
-        Some(rust::typ::lib::coll_der(acc, &iter))
+        let typ_tokens = cxt.lib_gen().coll_der_instantiate(acc, &iter);
+        Some(syn::parse_quote!(#typ_tokens))
     }
-    pub fn frame_res(&self, e_cxt: &cxt::pre::ECxt, _is_own: IsOwn) -> rust::Typ {
-        self.acc_t_param(e_cxt).clone()
+    pub fn frame_res(&self, cxt: &impl cxt::PreCxtLike, _is_own: IsOwn) -> rust::Typ {
+        self.acc_t_param(cxt).clone()
     }
-    pub fn zip_res(&self, e_cxt: &cxt::pre::ECxt, _is_own: IsOwn) -> rust::Typ {
-        let acc_t_param = self.acc_t_param(e_cxt);
+    pub fn zip_res(&self, cxt: &impl cxt::PreCxtLike, _is_own: IsOwn) -> rust::Typ {
+        let acc_t_param = self.acc_t_param(cxt);
         syn::parse_quote!(Self :: #acc_t_param)
     }
 }

@@ -41,11 +41,19 @@ pub struct ECxt {
 
     /// Expression definition from the frontend.
     def: rust::Enum,
+
+    /// Expression configuration.
+    e_conf: conf::EConf,
 }
 
 impl ECxt {
     /// Constructor.
-    pub fn new(cxt: &Cxt<Self>, e_idx: idx::Expr, def: rust::Enum) -> Res<Self> {
+    pub fn new(
+        cxt: &Cxt<Self>,
+        e_idx: idx::Expr,
+        def: rust::Enum,
+        e_conf: conf::EConf,
+    ) -> Res<Self> {
         let res_typ_id = gen::typ::res(&def.ident);
         let res_typ = rust::typ::plain(res_typ_id.clone(), None);
 
@@ -137,6 +145,8 @@ impl ECxt {
             zip_trait_id,
 
             def,
+
+            e_conf,
         })
     }
 
@@ -149,7 +159,7 @@ impl ECxt {
         let mut res: idx::ExprMap<_> = cxt
             .e_cxts()
             .iter()
-            .map(|e_cxt| cxt::frame::Info::new(e_cxt))
+            .map(|e_cxt| cxt::frame::InfoBuilder::new(e_cxt))
             .collect();
 
         // Used to compute the dependencies fixed-point.
@@ -220,7 +230,9 @@ impl ECxt {
         }
 
         debug_assert_eq!(cxt.e_cxts().len(), res.len());
-        res
+        res.into_index_iter()
+            .map(|(e_idx, builder)| builder.build(cxt, &cxt[e_idx], &exprs[e_idx]))
+            .collect()
     }
 
     /// Index accessor.

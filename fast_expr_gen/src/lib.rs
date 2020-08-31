@@ -7,6 +7,7 @@ pub extern crate syn;
 pub mod macros;
 
 pub mod check;
+pub mod conf;
 pub mod cxt;
 pub mod err;
 pub mod expr;

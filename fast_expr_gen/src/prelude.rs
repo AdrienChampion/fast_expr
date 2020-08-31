@@ -20,7 +20,7 @@ pub use smallvec::smallvec;
 pub use syn::Error;
 
 pub use crate::{
-    check,
+    check, conf,
     cxt::{self, Cxt},
     err::{self, Result as Res},
     expr, front, gen, log, logln, rust,

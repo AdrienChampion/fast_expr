@@ -146,11 +146,6 @@ pub mod lib {
         rust::typ::simple_path(path, id, None)
     }
 
-    pub fn coll_der(acc: &rust::Typ, iter: &rust::Typ) -> rust::Typ {
-        let coll_der = gen::lib::coll_der::instantiate(acc, iter);
-        syn::parse_quote!(#coll_der)
-    }
-
     pub fn zipper(e_typ: rust::Typ) -> rust::Typ {
         let path = Some(gen::lib_path());
         simple_path(

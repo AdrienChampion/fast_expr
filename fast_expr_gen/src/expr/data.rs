@@ -151,15 +151,16 @@ impl Data {
 
             DataTyp::Many(many) if many.is_self_rec() => {
                 let next_id = rust::Id::new("fast_expr_reserved_next", gen::span());
-                let acc_field = gen::lib::coll_der::acc_field();
-                let iter_field = gen::lib::coll_der::iter_field();
+                let acc_field = cxt.lib_gen().coll_der_acc_field();
+                let iter_field = cxt.lib_gen().coll_der_iter_field();
 
                 let fold = {
                     let folder = &cxt[many.e_idx()].zipper_trait().coll_folders()[many.e_idx()]
                         [many.c_idx()];
-                    let fold = folder.to_call_tokens(res);
+                    let fold = folder.to_call_tokens(cxt, res);
                     let step_field = &cxt.zip_ids().self_step_field();
-                    gen::lib::zip_do::early_return_if_not_down(quote!(#step_field.#fold))
+                    cxt.lib_gen()
+                        .zip_do_early_return_if_not_down(quote!(#step_field.#fold))
                 };
 
                 let keep_going = keep_going();
@@ -288,21 +289,22 @@ impl Data {
                     let acc = {
                         let init = initializer.to_call_tokens();
                         let step_field = &cxt.zip_ids().self_step_field();
-                        gen::lib::zip_do::early_return_if_not_down(quote! { #step_field.#init })
+                        cxt.lib_gen()
+                            .zip_do_early_return_if_not_down(quote! { #step_field.#init })
                     };
                     let iter = {
                         let iter_fun = many.iter_fun(is_own);
                         quote! { #id.#iter_fun() }
                     };
-                    let coll_der = gen::lib::coll_der::new(acc, iter);
+                    let coll_der = cxt.lib_gen().coll_der_new(acc, iter);
                     quote!(let mut #id = #coll_der;)
                 } else {
                     quote!()
                 };
 
                 let next_id = rust::Id::new("fast_expr_reserved_next", gen::span());
-                let acc_field = gen::lib::coll_der::acc_field();
-                let iter_field = gen::lib::coll_der::iter_field();
+                let acc_field = cxt.lib_gen().coll_der_acc_field();
+                let iter_field = cxt.lib_gen().coll_der_iter_field();
 
                 if many.is_self_rec() {
                     let keep_going = keep_going();
@@ -329,9 +331,10 @@ impl Data {
                     let fold_to_down = {
                         let folder = &cxt[many.e_idx()].zipper_trait().coll_folders()[many.e_idx()]
                             [many.c_idx()];
-                        let fold = folder.to_call_tokens(&next_id);
+                        let fold = folder.to_call_tokens(cxt, &next_id);
                         let step_field = &cxt.zip_ids().self_step_field();
-                        gen::lib::zip_do::early_return_if_not_down(quote!(#step_field.#fold))
+                        cxt.lib_gen()
+                            .zip_do_early_return_if_not_down(quote!(#step_field.#fold))
                     };
                     let keep_going = keep_going();
                     quote!(
@@ -397,32 +400,32 @@ impl DataTyp {
         }
     }
 
-    pub fn frame_typ(&self, e_cxt: &cxt::pre::ECxt, is_own: IsOwn) -> rust::Typ {
+    pub fn frame_typ(&self, cxt: &impl cxt::PreCxtLike, is_own: IsOwn) -> rust::Typ {
         match self {
-            Self::Leaf(leaf) => leaf.frame_typ(e_cxt, is_own),
-            Self::One(one) => one.frame_typ(e_cxt, is_own),
-            Self::Many(many) => many.frame_typ(e_cxt, is_own),
+            Self::Leaf(leaf) => leaf.frame_typ(cxt, is_own),
+            Self::One(one) => one.frame_typ(cxt, is_own),
+            Self::Many(many) => many.frame_typ(cxt, is_own),
         }
     }
-    pub fn frame_der(&self, e_cxt: &cxt::pre::ECxt, is_own: IsOwn) -> Option<rust::Typ> {
+    pub fn frame_der(&self, cxt: &impl cxt::PreCxtLike, is_own: IsOwn) -> Option<rust::Typ> {
         match self {
-            Self::Leaf(leaf) => leaf.frame_der(e_cxt, is_own),
-            Self::One(one) => one.frame_der(e_cxt, is_own),
-            Self::Many(many) => many.frame_der(e_cxt, is_own),
+            Self::Leaf(leaf) => leaf.frame_der(cxt, is_own),
+            Self::One(one) => one.frame_der(cxt, is_own),
+            Self::Many(many) => many.frame_der(cxt, is_own),
         }
     }
-    pub fn frame_res(&self, e_cxt: &cxt::pre::ECxt, is_own: IsOwn) -> rust::Typ {
+    pub fn frame_res(&self, cxt: &impl cxt::PreCxtLike, is_own: IsOwn) -> rust::Typ {
         match self {
-            Self::Leaf(leaf) => leaf.frame_res(e_cxt, is_own),
-            Self::One(one) => one.frame_res(e_cxt, is_own),
-            Self::Many(many) => many.frame_res(e_cxt, is_own),
+            Self::Leaf(leaf) => leaf.frame_res(cxt, is_own),
+            Self::One(one) => one.frame_res(cxt, is_own),
+            Self::Many(many) => many.frame_res(cxt, is_own),
         }
     }
-    pub fn zip_res(&self, e_cxt: &cxt::pre::ECxt, is_own: IsOwn) -> rust::Typ {
+    pub fn zip_res(&self, cxt: &impl cxt::PreCxtLike, is_own: IsOwn) -> rust::Typ {
         match self {
-            Self::Leaf(leaf) => leaf.zip_res(e_cxt, is_own),
-            Self::One(one) => one.zip_res(e_cxt, is_own),
-            Self::Many(many) => many.zip_res(e_cxt, is_own),
+            Self::Leaf(leaf) => leaf.zip_res(cxt, is_own),
+            Self::One(one) => one.zip_res(cxt, is_own),
+            Self::Many(many) => many.zip_res(cxt, is_own),
         }
     }
 

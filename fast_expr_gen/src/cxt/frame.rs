@@ -8,10 +8,15 @@ pub type Infos = idx::ExprMap<Info>;
 #[derive(Debug, Clone)]
 pub struct Info {
     fp_e_deps: Set<idx::Expr>,
+    frames: VFrames,
+}
+#[derive(Debug, Clone)]
+pub struct InfoBuilder {
+    fp_e_deps: Set<idx::Expr>,
     own_frame_generics: rust::Generics,
     ref_frame_generics: rust::Generics,
 }
-impl Info {
+impl InfoBuilder {
     pub fn new(e_cxt: &cxt::pre::ECxt) -> Self {
         let own_frame_generics = e_cxt.generics().clone();
         let ref_frame_generics = {
@@ -36,6 +41,20 @@ impl Info {
             fp_e_deps: Set::new(),
             own_frame_generics,
             ref_frame_generics,
+        }
+    }
+
+    pub fn build(self, cxt: &cxt::PreCxt, e_cxt: &cxt::pre::ECxt, expr: &expr::Expr) -> Info {
+        let frames = VFrames::new(
+            cxt,
+            e_cxt,
+            &expr,
+            self.own_frame_generics,
+            self.ref_frame_generics,
+        );
+        Info {
+            fp_e_deps: self.fp_e_deps,
+            frames,
         }
     }
 
@@ -75,6 +94,7 @@ pub struct Frame {
 
 impl Frame {
     pub fn new(
+        cxt: &cxt::PreCxt,
         e_cxt: &cxt::pre::ECxt,
         pivot_d_idx: idx::Data,
         data: &idx::DataMap<expr::Data>,
@@ -128,16 +148,16 @@ impl Frame {
                     }};
 
                     (opt $($mk_typ_fn:tt)*) => {{
-                        if let Some(own_typ) = $($mk_typ_fn)*(e_cxt, true) {
+                        if let Some(own_typ) = $($mk_typ_fn)*(cxt, true) {
                             push_fields!(@own own_typ)
                         }
-                        if let Some(ref_typ) = $($mk_typ_fn)*(e_cxt, false) {
+                        if let Some(ref_typ) = $($mk_typ_fn)*(cxt, false) {
                             push_fields!(@ref ref_typ)
                         }
                     }};
                     ($($mk_typ_fn:tt)*) => {{
-                        push_fields!(@own $($mk_typ_fn)*(e_cxt, true));
-                        push_fields!(@ref $($mk_typ_fn)*(e_cxt, false));
+                        push_fields!(@own $($mk_typ_fn)*(cxt, true));
+                        push_fields!(@ref $($mk_typ_fn)*(cxt, false));
                     }};
                 }
 
@@ -243,11 +263,11 @@ pub struct DFrames {
     frames: idx::DataMap<Option<Frame>>,
 }
 impl DFrames {
-    pub fn new(e_cxt: &cxt::pre::ECxt, variant: &expr::Variant) -> Self {
+    pub fn new(cxt: &cxt::PreCxt, e_cxt: &cxt::pre::ECxt, variant: &expr::Variant) -> Self {
         let frames = variant
             .data()
             .index_iter()
-            .map(|(d_idx, _)| Frame::new(e_cxt, d_idx, variant.data()))
+            .map(|(d_idx, _)| Frame::new(cxt, e_cxt, d_idx, variant.data()))
             .collect();
         Self { frames }
     }
@@ -279,6 +299,7 @@ pub struct VFrames {
 }
 impl VFrames {
     pub fn new(
+        cxt: &cxt::PreCxt,
         e_cxt: &cxt::pre::ECxt,
         expr: &expr::Expr,
         own_generics: rust::Generics,
@@ -289,7 +310,7 @@ impl VFrames {
         let frames = expr
             .variants()
             .iter()
-            .map(|variant| DFrames::new(e_cxt, variant))
+            .map(|variant| DFrames::new(cxt, e_cxt, variant))
             .collect();
         Self {
             e_idx,
@@ -357,11 +378,11 @@ impl VFrames {
             })
     }
 
-    pub fn to_sink_match_case_tokens(&self) -> TokenStream {
+    pub fn to_sink_match_case_tokens(&self, cxt: &cxt::ZipCxt) -> TokenStream {
         let frame_id = &self.id;
         let sink_variant = gen::frame::sink_variant_id();
         let empty_id = rust::Id::new("empty", gen::span());
-        let match_empty = gen::lib::sink::match_empty(&empty_id);
+        let match_empty = cxt.lib_gen().sink_match_empty(&empty_id);
         quote!(
             #frame_id :: #sink_variant ( #match_empty ) => match #empty_id {},
         )
@@ -377,7 +398,7 @@ impl VFrames {
             .plain_typ(is_own);
         let res_var = &cxt.zip_ids().res_var;
         let res_typ = e_cxt.res_typ_id();
-        let out_typ = e_cxt.zip_variant_handler_out_typ(is_own);
+        let out_typ = e_cxt.zip_variant_handler_out_typ(cxt, is_own);
 
         let do_it = e_cxt.expr().zip_handle_frames(cxt, &res_var, is_own);
 
@@ -410,16 +431,7 @@ implement! {
 }
 
 impl ECxt {
-    pub fn new(
-        pre: pre::ECxt,
-        Info {
-            fp_e_deps,
-            own_frame_generics,
-            ref_frame_generics,
-        }: Info,
-        expr: expr::Expr,
-    ) -> Self {
-        let frames = VFrames::new(&pre, &expr, own_frame_generics, ref_frame_generics);
+    pub fn new(pre: pre::ECxt, Info { fp_e_deps, frames }: Info, expr: expr::Expr) -> Self {
         Self {
             pre,
             fp_e_deps,

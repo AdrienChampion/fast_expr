@@ -1,6 +1,9 @@
 //! Frontend representation of an expression type and its sub-expressions.
 
-use syn::parse::{Parse, ParseStream};
+use syn::{
+    parse::{Parse, ParseStream},
+    punctuated::Punctuated,
+};
 
 prelude! {}
 
@@ -10,27 +13,40 @@ pub mod keyword {
         // Keyword indicating the start of a spec trait.
         spec
     }
+    syn::custom_keyword! {
+        // Keyword indicating the start of a fast_expr conf attribute.
+        fast_expr
+    }
 }
 
 /// Structure that comes out of the very first parsing step.
 pub struct Top {
+    /// Fast_expr configuration.
+    pub conf: conf::Conf,
     /// Specifications.
     pub specs: Vec<rust::Trait>,
     /// Expression types.
-    pub exprs: Vec<rust::Enum>,
+    pub exprs: Vec<(conf::EConf, rust::Enum)>,
 }
 
 impl Top {
     /// Empty constructor.
-    fn new() -> Self {
+    fn new(conf: conf::Conf) -> Self {
         Self {
+            conf,
             specs: vec![],
             exprs: vec![],
         }
     }
+}
 
-    /// Parses a token stream.
-    fn from_stream(&mut self, input: ParseStream) -> Res<()> {
+impl Parse for Top {
+    fn parse(input: ParseStream) -> Res<Self> {
+        let inner_attrs: Vec<rust::Attribute> = rust::Attribute::parse_inner(input)?;
+        let conf = conf::Conf::new(inner_attrs)?;
+
+        let mut slf = Self::new(conf);
+
         while !input.is_empty() {
             // Not sure if we're parsing a spec or an expression, get the attributes first.
             let mut attrs = input.call(rust::Attribute::parse_outer)?;
@@ -46,28 +62,100 @@ impl Top {
                 attrs = std::mem::replace(&mut spec.attrs, attrs);
                 spec.attrs.extend(attrs);
                 // Done, update `self`.
-                self.specs.push(spec)
+                slf.specs.push(spec)
             } else if lookahead.peek(syn::Token![pub]) || lookahead.peek(syn::Token![enum]) {
                 // Parsing an expression.
                 let mut expr: rust::Enum = input.parse()?;
                 // Put the attributes in there.
                 attrs = std::mem::replace(&mut expr.attrs, attrs);
                 expr.attrs.extend(attrs);
+                let e_conf = conf::EConf::new(&slf.conf, &mut expr)?;
                 // Done, update `self`.
-                self.exprs.push(expr)
+                slf.exprs.push((e_conf, expr));
             } else {
                 return Err(lookahead.error());
             }
         }
 
-        Ok(())
+        Ok(slf)
     }
 }
 
-impl Parse for Top {
+pub enum LitOrId {
+    Lit(rust::Lit),
+    Id(rust::Id),
+}
+impl LitOrId {
+    pub fn span(&self) -> rust::Span {
+        match self {
+            Self::Lit(lit) => lit.span(),
+            Self::Id(id) => id.span(),
+        }
+    }
+}
+impl Parse for LitOrId {
     fn parse(input: ParseStream) -> Res<Self> {
-        let mut slf = Self::new();
-        slf.from_stream(input)?;
-        Ok(slf)
+        let lookahead = input.lookahead1();
+
+        if lookahead.peek(rust::Id) {
+            let id = input.parse()?;
+            Ok(Self::Id(id))
+        } else if lookahead.peek(rust::Lit) {
+            let lit = input.parse()?;
+            Ok(Self::Lit(lit))
+        } else {
+            return Err(lookahead.error());
+        }
+    }
+}
+
+pub struct ConfField {
+    pub id: rust::Id,
+    pub val: Option<(syn::token::Colon, LitOrId)>,
+}
+impl ConfField {
+    pub fn into_bool_opt(self) -> Res<(rust::Span, Option<bool>)> {
+        let val = match self.val {
+            None => None,
+            Some((_, LitOrId::Lit(rust::Lit::Bool(b)))) => Some(b.value),
+            Some((_, val)) => bail!(@(val.span(), "expected boolean or nothing")),
+        };
+        Ok((self.id.span(), val))
+    }
+
+    pub fn into_id(self) -> Res<(rust::Span, rust::Id)> {
+        match self.val {
+            None => bail!(on(self.id, "expected identifier")),
+            Some((_, LitOrId::Id(id))) => Ok((id.span(), id)),
+            Some((_, val)) => bail!(@(val.span(), "expected identifier")),
+        }
+    }
+}
+impl Parse for ConfField {
+    fn parse(input: ParseStream) -> Res<Self> {
+        let id = input.parse()?;
+
+        let val = if input.peek(syn::token::Comma) {
+            None
+        } else {
+            let colon = input.parse()?;
+            let lit = input.parse()?;
+            Some((colon, lit))
+        };
+
+        Ok(Self { id, val })
+    }
+}
+
+pub struct Conf {
+    pub fields: Punctuated<ConfField, syn::token::Comma>,
+}
+impl Parse for Conf {
+    fn parse(input: ParseStream) -> Res<Self> {
+        let _: keyword::fast_expr = input.parse()?;
+
+        let fields = Punctuated::parse_terminated(input)?;
+
+        Ok(Self { fields })
     }
 }

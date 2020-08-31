@@ -172,7 +172,7 @@ impl One {
     pub fn needs_frame(&self) -> bool {
         self.is_self_rec()
     }
-    pub fn frame_typ(&self, _e_cxt: &cxt::pre::ECxt, is_own: IsOwn) -> rust::Typ {
+    pub fn frame_typ(&self, _cxt: &impl cxt::PreCxtLike, is_own: IsOwn) -> rust::Typ {
         let typ = self.typ.clone();
         if is_own {
             typ
@@ -180,13 +180,13 @@ impl One {
             rust::typ::to_expr_ref(typ)
         }
     }
-    pub fn frame_der(&self, _e_cxt: &cxt::pre::ECxt, _is_own: IsOwn) -> Option<rust::Typ> {
+    pub fn frame_der(&self, _cxt: &impl cxt::PreCxtLike, _is_own: IsOwn) -> Option<rust::Typ> {
         None
     }
-    pub fn frame_res(&self, _e_cxt: &cxt::pre::ECxt, _is_own: IsOwn) -> rust::Typ {
+    pub fn frame_res(&self, _cxt: &impl cxt::PreCxtLike, _is_own: IsOwn) -> rust::Typ {
         self.res_typ.clone()
     }
-    pub fn zip_res(&self, _e_cxt: &cxt::pre::ECxt, _is_own: IsOwn) -> rust::Typ {
+    pub fn zip_res(&self, _cxt: &impl cxt::PreCxtLike, _is_own: IsOwn) -> rust::Typ {
         let res = &self.res_typ;
         syn::parse_quote!(Self :: #res)
     }

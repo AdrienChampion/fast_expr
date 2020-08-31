@@ -28,7 +28,7 @@ impl Leaf {
         false
     }
 
-    pub fn frame_typ(&self, _e_cxt: &cxt::pre::ECxt, is_own: IsOwn) -> rust::Typ {
+    pub fn frame_typ(&self, _cxt: &impl cxt::PreCxtLike, is_own: IsOwn) -> rust::Typ {
         let typ = self.typ.clone();
         if is_own {
             typ
@@ -36,13 +36,13 @@ impl Leaf {
             rust::typ::to_expr_ref(typ)
         }
     }
-    pub fn frame_der(&self, _e_cxt: &cxt::pre::ECxt, _is_own: IsOwn) -> Option<rust::Typ> {
+    pub fn frame_der(&self, _cxt: &impl cxt::PreCxtLike, _is_own: IsOwn) -> Option<rust::Typ> {
         None
     }
-    pub fn frame_res(&self, e_cxt: &cxt::pre::ECxt, is_own: IsOwn) -> rust::Typ {
-        self.frame_typ(e_cxt, is_own)
+    pub fn frame_res(&self, cxt: &impl cxt::PreCxtLike, is_own: IsOwn) -> rust::Typ {
+        self.frame_typ(cxt, is_own)
     }
-    pub fn zip_res(&self, e_cxt: &cxt::pre::ECxt, is_own: IsOwn) -> rust::Typ {
-        self.frame_res(e_cxt, is_own)
+    pub fn zip_res(&self, cxt: &impl cxt::PreCxtLike, is_own: IsOwn) -> rust::Typ {
+        self.frame_res(cxt, is_own)
     }
 }

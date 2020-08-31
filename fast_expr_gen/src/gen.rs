@@ -239,207 +239,158 @@ Zipper over owned expressions.\
     }
 }
 
-#[allow(non_upper_case_globals)]
-pub mod lib {
-    use super::*;
-
-    pub fn path() -> Id {
-        Id::new("fast_expr", span())
+#[derive(Debug, Clone)]
+pub struct Lib {
+    path: rust::Id,
+}
+impl Lib {
+    pub fn new(conf: &conf::Conf) -> Self {
+        let path = conf.fast_expr_name.deref().clone();
+        Self { path }
     }
 
-    pub mod sink {
-        use super::*;
-
-        pub fn id() -> Id {
-            Id::new("Sink", span())
-        }
-
-        pub fn instantiate(t: impl ToTokens) -> TokenStream {
-            let path = gen::lib::path();
-            let sink = id();
-            quote! { #path :: #sink < #t > }
-        }
-
-        pub fn match_empty(id: &rust::Id) -> TokenStream {
-            quote! { (_, #id) }
-        }
+    fn sink_id() -> Id {
+        Id::new("Sink", span())
+    }
+    pub fn sink_instantiate(&self, tt: impl ToTokens) -> TokenStream {
+        let path = &self.path;
+        let sink = Self::sink_id();
+        quote! { #path :: #sink < #tt > }
+    }
+    pub fn sink_match_empty(&self, id: &rust::Id) -> TokenStream {
+        quote! { (_, #id) }
     }
 
-    pub mod empty {
-        use super::*;
-
-        pub fn id() -> Id {
-            Id::new("Empty", span())
-        }
-
-        pub fn instantiate() -> TokenStream {
-            let path = gen::lib::path();
-            let empty = id();
-            quote! { #path :: #empty }
-        }
+    fn empty_id() -> Id {
+        Id::new("Empty", span())
+    }
+    pub fn empty_instantiate(&self) -> TokenStream {
+        let path = &self.path;
+        let empty = Self::empty_id();
+        quote! { #path :: #empty }
     }
 
-    pub mod coll_der {
-        use super::*;
-
-        pub fn id() -> Id {
-            Id::new("CollDer", span())
+    fn coll_der_id() -> Id {
+        Id::new("CollDer", span())
+    }
+    pub fn coll_der_instantiate(&self, acc: impl ToTokens, iter: impl ToTokens) -> TokenStream {
+        let path = &self.path;
+        let coll_der = Self::coll_der_id();
+        quote! {
+            #path :: #coll_der < #acc, #iter >
         }
-
-        pub fn instantiate(acc: impl ToTokens, iter: impl ToTokens) -> TokenStream {
-            let path = gen::lib::path();
-            let coll_der = id();
-            quote! {
-                #path :: #coll_der < #acc, #iter >
-            }
-        }
-
-        pub fn acc_field() -> Id {
-            Id::new("acc", span())
-        }
-        pub fn iter_field() -> Id {
-            Id::new("iter", span())
-        }
-
-        pub fn new(acc: impl ToTokens, iter: impl ToTokens) -> TokenStream {
-            let path = gen::lib::path();
-            let coll_der = id();
-            quote! {
-                #path :: #coll_der :: new (#acc, #iter)
-            }
+    }
+    pub fn coll_der_acc_field(&self) -> Id {
+        Id::new("acc", span())
+    }
+    pub fn coll_der_iter_field(&self) -> Id {
+        Id::new("iter", span())
+    }
+    pub fn coll_der_new(&self, acc: impl ToTokens, iter: impl ToTokens) -> TokenStream {
+        let path = &self.path;
+        let coll_der = Self::coll_der_id();
+        quote! {
+            #path :: #coll_der :: new ( #acc, #iter )
         }
     }
 
-    pub mod zip_do {
-        use super::*;
-
-        pub fn id() -> Id {
-            Id::new("ZipDo", span())
-        }
-
-        pub fn instantiate(
-            down: impl ToTokens,
-            expr: impl ToTokens,
-            res: impl ToTokens,
-        ) -> TokenStream {
-            let path = gen::lib::path();
-            let zip_do = id();
-            quote! {
-                #path :: #zip_do < #down, #expr, #res >
-            }
-        }
-
-        pub fn go_down() -> Id {
-            Id::new("GoDown", span())
-        }
-        pub fn go_up() -> Id {
-            Id::new("GoUp", span())
-        }
-        pub fn subst() -> Id {
-            Id::new("Subst", span())
-        }
-        pub fn early() -> Id {
-            Id::new("Early", span())
-        }
-
-        pub fn match_cases(
-            down_pat: impl ToTokens,
-            down_do: impl ToTokens,
-            up_pat: impl ToTokens,
-            up_do: impl ToTokens,
-            subst_pat: impl ToTokens,
-            subst_do: impl ToTokens,
-            early_pat: impl ToTokens,
-            early_do: impl ToTokens,
-        ) -> TokenStream {
-            let path = gen::lib::path();
-            let zip_do = id();
-            let (down, up, subst, early) = (go_down(), go_up(), subst(), early());
-            quote! {
-                #path :: #zip_do :: #down (#down_pat) => #down_do,
-                #path :: #zip_do :: #up (#up_pat) => #up_do,
-                #path :: #zip_do :: #subst (#subst_pat) => #subst_do,
-                #path :: #zip_do :: #early (#early_pat) => #early_do,
-            }
-        }
-
-        pub fn map_down() -> Id {
-            Id::new("map_down", span())
-        }
-        pub fn down_and_then() -> Id {
-            Id::new("down_and_then", span())
-        }
-
-        fn new(variant: Id, inner: impl ToTokens) -> TokenStream {
-            let lib_path = gen::lib::path();
-            let zip_do = id();
-            quote! {
-                #lib_path :: #zip_do :: #variant ( #inner )
-            }
-        }
-
-        pub fn new_go_down(inner: impl ToTokens) -> TokenStream {
-            new(go_down(), inner)
-        }
-        pub fn new_go_up(inner: impl ToTokens) -> TokenStream {
-            new(go_up(), inner)
-        }
-        pub fn new_subst(inner: impl ToTokens) -> TokenStream {
-            new(subst(), inner)
-        }
-        pub fn new_early(inner: impl ToTokens) -> TokenStream {
-            new(early(), inner)
-        }
-
-        pub fn early_return_if_not_down(expr: impl ToTokens) -> TokenStream {
-            let path = gen::lib::path();
-            let id = id();
-            let go_down = go_down();
-            let go_up = go_up();
-            let subst = subst();
-            let early = early();
-            quote! {
-                match #expr {
-                    #path :: #id :: #go_down (stuff) => stuff,
-                    #path :: #id :: #go_up (stuff) => return #path :: #id :: #go_up (stuff),
-                    #path :: #id :: #subst (stuff) => return #path :: #id :: #subst (stuff),
-                    #path :: #id :: #early (stuff) => return #path :: #id :: #early (stuff),
-                }
-            }
+    fn zip_do_id() -> Id {
+        Id::new("ZipDo", span())
+    }
+    fn zip_do_go_down_id() -> Id {
+        Id::new("GoDown", span())
+    }
+    fn zip_do_go_up_id() -> Id {
+        Id::new("GoUp", span())
+    }
+    fn zip_do_subst_id() -> Id {
+        Id::new("Subst", span())
+    }
+    fn zip_do_early_id() -> Id {
+        Id::new("Early", span())
+    }
+    pub fn zip_do_instantiate(
+        &self,
+        down: impl ToTokens,
+        expr: impl ToTokens,
+        res: impl ToTokens,
+    ) -> TokenStream {
+        let path = &self.path;
+        let zip_do = Self::zip_do_id();
+        quote! {
+            #path :: #zip_do < #down, #expr, #res >
         }
     }
 
-    pub mod zipper_trait {
-        use super::*;
-
-        pub fn id() -> Id {
-            Id::new("Zipper", span())
-        }
-        pub fn res_t_param() -> Id {
-            Id::new("Res", span())
-        }
-        pub fn zip_fn() -> Id {
-            Id::new("zip", span())
+    pub fn zip_do_match_cases(
+        &self,
+        down_pat: impl ToTokens,
+        down_do: impl ToTokens,
+        up_pat: impl ToTokens,
+        up_do: impl ToTokens,
+        subst_pat: impl ToTokens,
+        subst_do: impl ToTokens,
+        early_pat: impl ToTokens,
+        early_do: impl ToTokens,
+    ) -> TokenStream {
+        let path = &self.path;
+        let zip_do = Self::zip_do_id();
+        let (down, up, subst, early) = (
+            Self::zip_do_go_down_id(),
+            Self::zip_do_go_up_id(),
+            Self::zip_do_subst_id(),
+            Self::zip_do_early_id(),
+        );
+        quote! {
+            #path :: #zip_do :: #down (#down_pat) => #down_do,
+            #path :: #zip_do :: #up (#up_pat) => #up_do,
+            #path :: #zip_do :: #subst (#subst_pat) => #subst_do,
+            #path :: #zip_do :: #early (#early_pat) => #early_do,
         }
     }
 
-    pub mod stepper_trait {
-        use super::*;
+    pub fn zip_do_map_down(&self) -> Id {
+        Id::new("map_down", span())
+    }
+    pub fn zip_do_down_and_then(&self) -> Id {
+        Id::new("down_and_then", span())
+    }
 
-        pub fn id() -> Id {
-            Id::new("Stepper", span())
+    fn zip_do_new(&self, variant: Id, inner: impl ToTokens) -> TokenStream {
+        let lib_path = &self.path;
+        let zip_do = Self::zip_do_id();
+        quote! {
+            #lib_path :: #zip_do :: #variant ( #inner )
         }
-        pub fn frame_t_param() -> Id {
-            Id::new("Frame", span())
-        }
-        pub fn res_t_param() -> Id {
-            Id::new("StepRes", span())
-        }
-        pub fn handle_expr_fn() -> Id {
-            Id::new("handle_expr", span())
-        }
-        pub fn handle_frame_fn() -> Id {
-            Id::new("handle_frame", span())
+    }
+
+    pub fn zip_do_new_go_down(&self, inner: impl ToTokens) -> TokenStream {
+        self.zip_do_new(Self::zip_do_go_down_id(), inner)
+    }
+    pub fn zip_do_new_go_up(&self, inner: impl ToTokens) -> TokenStream {
+        self.zip_do_new(Self::zip_do_go_up_id(), inner)
+    }
+    pub fn zip_do_new_subst(&self, inner: impl ToTokens) -> TokenStream {
+        self.zip_do_new(Self::zip_do_subst_id(), inner)
+    }
+    pub fn zip_do_new_early(&self, inner: impl ToTokens) -> TokenStream {
+        self.zip_do_new(Self::zip_do_early_id(), inner)
+    }
+
+    pub fn zip_do_early_return_if_not_down(&self, expr: impl ToTokens) -> TokenStream {
+        let path = &self.path;
+        let id = Self::zip_do_id();
+        let go_down = Self::zip_do_go_down_id();
+        let go_up = Self::zip_do_go_up_id();
+        let subst = Self::zip_do_subst_id();
+        let early = Self::zip_do_early_id();
+        quote! {
+            match #expr {
+                #path :: #id :: #go_down (stuff) => stuff,
+                #path :: #id :: #go_up (stuff) => return #path :: #id :: #go_up (stuff),
+                #path :: #id :: #subst (stuff) => return #path :: #id :: #subst (stuff),
+                #path :: #id :: #early (stuff) => return #path :: #id :: #early (stuff),
+            }
         }
     }
 }

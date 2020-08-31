@@ -9,14 +9,14 @@ pub struct FnParam {
     ref_typ: rust::Typ,
 }
 impl FnParam {
-    pub fn from_data(e_cxt: &cxt::frame::ECxt, data: &expr::Data) -> Self {
+    pub fn from_data(cxt: &cxt::FrameCxt, data: &expr::Data) -> Self {
         let id = gen::fun::param::data_param(
             data.d_id()
                 .map(Either::Left)
                 .unwrap_or_else(|| Either::Right(data.d_idx())),
         );
-        let own_typ = data.zip_res(e_cxt, true);
-        let ref_typ = data.zip_res(e_cxt, false);
+        let own_typ = data.zip_res(cxt, true);
+        let ref_typ = data.zip_res(cxt, false);
         Self {
             id,
             own_typ,
@@ -67,7 +67,7 @@ impl VariantHandler {
         let go_up_params = variant
             .data()
             .iter()
-            .map(|data| FnParam::from_data(&cxt[e_idx], data))
+            .map(|data| FnParam::from_data(cxt, data))
             .collect();
         let go_up_res = {
             let typ = cxt[e_idx].res_typ_id();
@@ -133,8 +133,8 @@ impl CollFolder {
                 if p_d_idx < d_idx {
                     FnParam::new(
                         id,
-                        rust::typ::reference(None, p_data.zip_res(e_cxt, true)),
-                        rust::typ::reference(None, p_data.zip_res(e_cxt, false)),
+                        rust::typ::reference(None, p_data.zip_res(cxt, true)),
+                        rust::typ::reference(None, p_data.zip_res(cxt, false)),
                     )
                 } else if p_d_idx == d_idx {
                     let acc = e_cxt.colls()[c_idx].acc_t_param_id();
@@ -150,8 +150,8 @@ impl CollFolder {
                     debug_assert!(p_d_idx > d_idx);
                     FnParam::new(
                         id,
-                        rust::typ::reference(None, p_data.frame_typ(e_cxt, true)),
-                        rust::typ::reference(None, p_data.frame_typ(e_cxt, false)),
+                        rust::typ::reference(None, p_data.frame_typ(cxt, true)),
+                        rust::typ::reference(None, p_data.frame_typ(cxt, false)),
                     )
                 }
             })
@@ -176,7 +176,7 @@ impl CollFolder {
             let acc_t_param = cxt[self.e_idx].colls()[self.c_idx].acc_t_param_id();
             let expr_typ = cxt[self.e_idx].plain_typ_for(is_own);
             let res_typ = cxt[self.e_idx].res_typ_id();
-            gen::lib::zip_do::instantiate(
+            cxt.lib_gen().zip_do_instantiate(
                 quote!(Self::#acc_t_param),
                 expr_typ,
                 quote!(Self::#res_typ),
@@ -190,12 +190,12 @@ impl CollFolder {
         }
     }
 
-    pub fn to_call_tokens(&self, res: impl ToTokens) -> TokenStream {
+    pub fn to_call_tokens(&self, cxt: &cxt::ZipCxt, res: impl ToTokens) -> TokenStream {
         let id = &self.id;
         let params = self.params.index_iter().map(|(p_d_idx, param)| {
             let id = param.id();
             if p_d_idx == self.d_idx {
-                let acc_field = gen::lib::coll_der::acc_field();
+                let acc_field = cxt.lib_gen().coll_der_acc_field();
                 quote!((#id.#acc_field, #res))
             } else {
                 quote!(&#id)
@@ -242,15 +242,15 @@ impl CollInitializer {
                 if p_d_idx < d_idx {
                     FnParam::new(
                         id,
-                        rust::typ::reference(None, p_data.zip_res(e_cxt, true)),
-                        rust::typ::reference(None, p_data.zip_res(e_cxt, false)),
+                        rust::typ::reference(None, p_data.zip_res(cxt, true)),
+                        rust::typ::reference(None, p_data.zip_res(cxt, false)),
                     )
                 } else {
                     debug_assert!(p_d_idx >= d_idx);
                     FnParam::new(
                         id,
-                        rust::typ::reference(None, p_data.frame_typ(e_cxt, true)),
-                        rust::typ::reference(None, p_data.frame_typ(e_cxt, false)),
+                        rust::typ::reference(None, p_data.frame_typ(cxt, true)),
+                        rust::typ::reference(None, p_data.frame_typ(cxt, false)),
                     )
                 }
             })
@@ -275,7 +275,7 @@ impl CollInitializer {
             let acc_t_param = cxt[self.e_idx].colls()[self.c_idx].acc_t_param_id();
             let expr_typ = cxt[self.e_idx].plain_typ_for(is_own);
             let res_typ = cxt[self.e_idx].res_typ_id();
-            gen::lib::zip_do::instantiate(
+            cxt.lib_gen().zip_do_instantiate(
                 quote!(Self::#acc_t_param),
                 expr_typ,
                 quote!(Self::#res_typ),
@@ -432,7 +432,7 @@ impl ZipperTrait {
             .fp_e_deps()
             .iter()
             .cloned()
-            .map(|dep_e_idx| cxt[dep_e_idx].fun_inspect_self_def_tokens(is_own));
+            .map(|dep_e_idx| cxt[dep_e_idx].fun_inspect_self_def_tokens(cxt, is_own));
 
         let initializers = self
             .initializers
