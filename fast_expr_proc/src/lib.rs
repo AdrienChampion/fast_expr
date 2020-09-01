@@ -475,11 +475,6 @@ pub fn fast_expr(stream: proc_macro::TokenStream) -> proc_macro::TokenStream {
 
     match res {
         Ok(res) => res,
-        Err(e) => {
-            logln!("code generation failed...");
-            logln!();
-
-            proc_macro::TokenStream::from(e.to_compile_error())
-        }
+        Err(e) => proc_macro::TokenStream::from(e.to_compile_error()),
     }
 }

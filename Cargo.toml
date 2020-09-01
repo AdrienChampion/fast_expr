@@ -3,6 +3,7 @@ members = [
     "./fast_expr_gen",
     "./fast_expr_proc",
     ".",
+    "book/fast_expr_demo",
 ]
 default-members = [
     "./fast_expr_proc",
