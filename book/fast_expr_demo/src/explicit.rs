@@ -67,11 +67,16 @@ impl<S: Spec> Expr<S> {
         S::Id: PartialEq + Eq + PartialOrd + Ord + Clone,
         Self: Clone,
     {
+        // Stack of frames.
         let mut stack: Vec<Frame<S, Vec<Self>, Self>> = vec![];
+        // Current expression.
         let mut expr = self;
 
+        // Goes down `expr`.
         'go_down: loop {
+            // Try to build a result, which only happens on `Expr`'s leaves: `Var` and `Cst`.
             let mut res: Self = match expr {
+                // Variable, attempt the substitution and yield the result.
                 Self::Var(id) => {
                     if let Some(expr) = map.get(&id) {
                         expr.clone()
@@ -80,35 +85,63 @@ impl<S: Spec> Expr<S> {
                     }
                 }
 
+                // Constant, just yield it.
                 cst @ Self::Cst(_) => cst,
 
+                // Application, we need to go down `head`.
                 Self::App { op, head, tail } => {
+                    // Build the frame to remember `op` and `tail`.
                     let frame = Frame::AppHead { op, tail };
+                    // Push the frame on the stack.
                     stack.push(frame);
+                    // Update current expression.
                     expr = *head;
+                    // Go down `expr`.
                     continue 'go_down;
                 }
             };
 
+            // At this point we have a result, time to propagate it upwards thanks to the stack.
             'go_up: while let Some(frame) = stack.pop() {
+                // We have a frame, let's handle it.
                 match frame {
+                    // We just went up from the `head` of an `App`, the frame gives us `op` and
+                    // `tail` back.
                     Frame::AppHead { op, tail } => {
+                        // Current result is for `head`.
                         let head = res;
+                        // Initial value of the accumulator over `tail`.
                         let acc = Vec::with_capacity(tail.len());
+                        // Iterator over `tail`.
                         let mut tail = tail.into_iter();
 
+                        // Do we have a next element in `tail` to work with?
                         if let Some(next) = tail.next() {
+                            // Yeah, gather the accumulator and the tail iterator.
                             let tail = (acc, tail);
+                            // Build the frame remembering everything we need:
+                            // - operator
+                            // - head *result*
+                            // - accumulator and iterator over the rest of the tail.
                             let frame = Frame::AppTail { op, head, tail };
+                            // Push the frame on the stack.
                             stack.push(frame);
+                            // Update current expression.
                             expr = next;
+                            // Go down `expr`.
                             continue 'go_down;
                         } else {
+                            // Nothing in the tail to handle, we're "going up" this application.
+                            // Update the current result.
                             res = Expr::app(op, head, acc);
+                            // Go up the stack with that result.
                             continue 'go_up;
                         }
                     }
 
+                    // We just went up from an element of an application tail, the frame gives us
+                    // `op`, the `head` *result*, the current accumulator value and the iterator
+                    // over the rest of the tail.
                     Frame::AppTail {
                         op,
                         head,
