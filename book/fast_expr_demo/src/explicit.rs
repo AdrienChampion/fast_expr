@@ -1,11 +1,15 @@
-//! An explicit zipper.
+//! An explicit substitution example.
 
-prelude! {}
+use std::collections::BTreeMap;
 
+// ANCHOR: expr_def
 /// Expression specification.
 pub trait Spec {
+    /// Values (for constants).
     type Val;
+    /// Identifiers (for variables).
     type Id;
+    /// Operators (for applications)
     type Op;
 }
 
@@ -26,7 +30,9 @@ pub enum Expr<S: Spec> {
         tail: Vec<Self>,
     },
 }
+// ANCHOR_END: expr_def
 
+// ANCHOR: frame_def
 /// Frames for [`Expr`](./struct.Expr.html).
 pub enum Frame<S: Spec, AppTailAcc, Res> {
     /// Information we must remember when going down the `head` of an `Expr::App`.
@@ -46,6 +52,7 @@ pub enum Frame<S: Spec, AppTailAcc, Res> {
         tail: (AppTailAcc, std::vec::IntoIter<Expr<S>>),
     },
 }
+// ANCHOR_END: frame_def
 
 impl<S: Spec> Expr<S> {
     pub fn cst(val: S::Val) -> Self {
@@ -61,10 +68,14 @@ impl<S: Spec> Expr<S> {
             tail,
         }
     }
+}
 
+// ANCHOR: subst_def
+impl<S: Spec> Expr<S> {
+    /// Substitution over the variables of an expression.
     pub fn subst(self, map: &BTreeMap<S::Id, Self>) -> Self
     where
-        S::Id: PartialEq + Eq + PartialOrd + Ord + Clone,
+        S::Id: PartialEq + Eq + PartialOrd + Ord,
         Self: Clone,
     {
         // Stack of frames.
@@ -139,44 +150,62 @@ impl<S: Spec> Expr<S> {
                         }
                     }
 
-                    // We just went up from an element of an application tail, the frame gives us
-                    // `op`, the `head` *result*, the current accumulator value and the iterator
-                    // over the rest of the tail.
+                    // We just went up from an element of an application tail, the frame gives us...
                     Frame::AppTail {
+                        // ...the operator of the application...
                         op,
+                        // ...the `head` *result*...
                         head,
+                        // ...the current accumulator value and the iterator over the rest of the
+                        // tail.
                         tail: (mut acc, mut tail),
                     } => {
+                        // `res` contains the result for the element of the tail we going up from.
                         let curr_elem = res;
+                        // Add it to the accumulator.
                         acc.push(curr_elem);
 
+                        // Do we have a next element?
                         if let Some(next) = tail.next() {
+                            // Yes, build the new frame.
                             let frame = Frame::AppTail {
                                 op,
                                 head,
                                 tail: (acc, tail),
                             };
+                            // Push the frame on the stack.
                             stack.push(frame);
+                            // Update the current expression.
                             expr = next;
+                            // Go down `expr`.
                             continue 'go_down;
                         } else {
+                            // We're done with the element of this application, build its result.
                             res = Expr::app(op, head, acc);
+                            // Go up with that result.
                             continue 'go_up;
                         }
                     }
                 }
             }
 
+            // This point is only reachable if the stack is empty.
             assert!(stack.is_empty());
+            // `res` thus contains the result for going up from the top-most expression, which is
+            // the result of the whole substitution process.
             return res;
         }
     }
 }
+// ANCHOR_END: subst_def
 
+// ANCHOR: example_spec
 /// Integer operators.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum IOp {
+    /// Addition.
     Add,
+    /// Subtraction.
     Sub,
 }
 
@@ -191,8 +220,12 @@ impl Spec for ISpec {
 
 /// Integer expressions.
 pub type IExpr = Expr<ISpec>;
+// ANCHOR_END: example_spec
 
+// ANCHOR: example
+/// Helper macro to build expressions easily.
 macro_rules! iexpr {
+    // `Add` application.
     ( ( $expr_head:tt $(+ $expr_tail:tt)* ) ) => {
         IExpr::app(
             IOp::Add,
@@ -202,6 +235,7 @@ macro_rules! iexpr {
             ],
         )
     };
+    // `Sub` application.
     ( ( $expr_head:tt $(- $expr_tail:tt)* ) ) => {
         IExpr::app(
             IOp::Sub,
@@ -211,20 +245,23 @@ macro_rules! iexpr {
             ],
         )
     };
+    // `Id` as a token, must be given between `[...]`.
     ([$id:tt]) => {
         IExpr::var(stringify!($id))
     };
+    // `Cst` as an expression.
     ($val:expr) => {
         IExpr::cst($val)
     };
 }
 
-#[test]
-fn subst_1() {
-    test_subst_1()
-}
+/// Tests `Expr::subst`.
 pub fn test_subst_1() {
-    let map = {
+    // Substitution map.
+    let map: BTreeMap<
+        &'static str, // ISpec::Id
+        IExpr,        // Expr<ISpec>
+    > = {
         let mut map = BTreeMap::new();
         let _prev = map.insert("v_1", iexpr!(1));
         assert_eq!(_prev, None);
@@ -238,22 +275,32 @@ pub fn test_subst_1() {
     }
     println!("}}");
 
+    // Test expression we'll `subst(map)` soon.
     let iexpr = iexpr! {
         (3 + [v_2] + (7 - [v_1]))
     };
     println!("iexpr:     {:?}", iexpr);
 
+    // Expected result.
     let expected = iexpr! {
         (3 + [v_3] + (7 - 1))
     };
     println!("expected:  {:?}", expected);
 
+    // Apply the substitution.
     let iexpr = iexpr.subst(&map);
     println!("subst res: {:?}", iexpr);
 
+    // Check the result.
     assert!(iexpr == expected);
 
     println!("no problem")
+}
+// ANCHOR_END: example
+
+#[test]
+fn subst_1() {
+    test_subst_1()
 }
 
 pub fn main() {

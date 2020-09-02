@@ -11,3 +11,6 @@ Cargo.lock
 
 # fast_expr log files
 **/fast_expr_log.rs
+
+# stupid macos files
+**/.DS_Store
