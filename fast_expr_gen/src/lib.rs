@@ -113,7 +113,7 @@ pub mod internal {
     /// # Examples
     ///
     /// ```rust
-    /// # use fast_expr::internal::Empty;
+    /// # use fast_expr_gen::internal::Empty;
     /// let opt: Option<Empty>;
     /// // `Empty` is inhabited, so the only value `opt` can have is `None`.
     /// let opt: Option<Empty> = None;
