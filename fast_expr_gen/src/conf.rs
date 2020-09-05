@@ -261,7 +261,7 @@ impl Conf {
                 .from_user_span
                 .clone()
                 .unwrap_or_else(gen::span);
-            let pub_token = syn::token::Pub { span };
+            let pub_token = rust::token::Pub { span };
             syn::parse_quote!(#pub_token)
         } else {
             rust::Visibility::Inherited

@@ -12,11 +12,11 @@ fn new_segment(ident: Id, args: Option<GenericArgs>) -> syn::PathSegment {
             }
             syn::PathArguments::AngleBracketed(syn::AngleBracketedGenericArguments {
                 colon2_token: None,
-                lt_token: syn::token::Lt {
+                lt_token: rust::token::Lt {
                     spans: [Span::mixed_site()],
                 },
                 args,
-                gt_token: syn::token::Gt {
+                gt_token: rust::token::Gt {
                     spans: [Span::mixed_site()],
                 },
             })
@@ -28,7 +28,7 @@ fn new_segment(ident: Id, args: Option<GenericArgs>) -> syn::PathSegment {
     syn::PathSegment { ident, arguments }
 }
 
-fn typ_from_segments(segments: Punctuated<syn::PathSegment, syn::token::Colon2>) -> Typ {
+fn typ_from_segments(segments: Punctuated<syn::PathSegment, rust::token::Colon2>) -> Typ {
     Typ::Path(syn::TypePath {
         qself: None,
         path: syn::Path {
@@ -49,17 +49,17 @@ pub fn plain(ident: Id, args: Option<GenericArgs>) -> Typ {
 
 pub fn tuple(typs: impl IntoIterator<Item = Typ>) -> Typ {
     Typ::Tuple(syn::TypeTuple {
-        paren_token: syn::token::Paren::default(),
+        paren_token: rust::token::Paren::default(),
         elems: typs.into_iter().collect(),
     })
 }
 
 fn internal_ref(lifetime: Option<Lifetime>, typ: Typ, is_mut: bool) -> Typ {
     Typ::Reference(syn::TypeReference {
-        and_token: syn::token::And::default(),
+        and_token: rust::token::And::default(),
         lifetime,
         mutability: if is_mut {
-            Some(syn::token::Mut::default())
+            Some(rust::token::Mut::default())
         } else {
             None
         },
@@ -174,7 +174,7 @@ pub mod lib {
 
 pub fn to_expr_ref(typ: rust::Typ) -> Typ {
     Typ::Reference(syn::TypeReference {
-        and_token: syn::token::And {
+        and_token: rust::token::And {
             spans: [gen::span()],
         },
         lifetime: Some(gen::lifetime::expr()),

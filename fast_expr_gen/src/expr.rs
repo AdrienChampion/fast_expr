@@ -177,7 +177,7 @@ impl Expr {
         self.src.enum_token.to_tokens(stream);
         self.src.ident.to_tokens(stream);
         {
-            let (_, type_generics, where_clause) = self.generics.split_for_impl();
+            let (type_generics, _, where_clause) = self.generics.split_for_impl();
             type_generics.to_tokens(stream);
             where_clause.to_tokens(stream);
         }

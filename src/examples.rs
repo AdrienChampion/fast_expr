@@ -8,10 +8,11 @@ macro_rules! prelude {
 
 pub mod test;
 
+pub mod book_subst_1;
 pub mod simple;
 
 pub mod prelude {
-    pub use std::{collections::BTreeMap as Map, convert::TryInto, fmt};
+    pub use std::{collections::BTreeMap, convert::TryInto, fmt};
 
     pub type Res<T> = Result<T, String>;
 
@@ -91,8 +92,8 @@ pub mod id {
         }
     }
 
-    pub type BModel = Map<BId, BCst>;
-    pub type IModel = Map<IId, ICst>;
+    pub type BModel = BTreeMap<BId, BCst>;
+    pub type IModel = BTreeMap<IId, ICst>;
 
     pub struct Model {
         pub b_model: BModel,

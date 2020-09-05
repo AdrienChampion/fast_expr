@@ -121,7 +121,7 @@ impl Data {
             if let Some(token) = self.src.colon_token {
                 token.to_tokens(stream)
             } else {
-                syn::token::Colon {
+                rust::token::Colon {
                     spans: [rust::Span::mixed_site()],
                 }
                 .to_tokens(stream)

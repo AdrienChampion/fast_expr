@@ -132,7 +132,7 @@ impl Variant {
     fn to_fields_tokens(
         &self,
         stream: &mut TokenStream,
-        fields: &syn::punctuated::Punctuated<rust::Field, syn::token::Comma>,
+        fields: &syn::punctuated::Punctuated<rust::Field, rust::token::Comma>,
     ) {
         debug_assert_eq!(fields.len(), self.data.len());
         let mut d_idx = idx::Data::zero();

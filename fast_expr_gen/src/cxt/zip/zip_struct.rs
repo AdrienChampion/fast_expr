@@ -69,9 +69,9 @@ impl ZipStruct {
 
         let new_generics = |is_own: bool| {
             let mut generics = rust::Generics {
-                lt_token: Some(syn::token::Lt::default()),
+                lt_token: Some(rust::token::Lt::default()),
                 params: syn::punctuated::Punctuated::new(),
-                gt_token: Some(syn::token::Gt::default()),
+                gt_token: Some(rust::token::Gt::default()),
                 where_clause: None,
             };
 

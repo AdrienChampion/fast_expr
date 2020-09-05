@@ -4,9 +4,11 @@ mod fast_expr {
     pub use crate::*;
 }
 
+use crate::fast_expr;
+
 prelude! {}
 
-crate::fast_expr! {
+fast_expr! {
     /// A monolithic expression type representing untyped expressions.
     pub enum Expr {
         /// A variable.
@@ -76,12 +78,12 @@ pub fn test() {
     let v = "v".to_string();
 
     let model_with = |val: cst::ICst| {
-        let mut i_model = Map::new();
+        let mut i_model = BTreeMap::new();
         let _prev = i_model.insert(v.clone(), val);
         debug_assert_eq!(_prev, None);
         id::Model {
             i_model,
-            b_model: Map::new(),
+            b_model: BTreeMap::new(),
         }
     };
 

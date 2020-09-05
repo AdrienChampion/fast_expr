@@ -120,7 +120,7 @@ impl Frame {
                 macro_rules! push_fields {
                     (@ident_colon) => {{
                         curr_data.d_id().map(|id|
-                            (Some(id.clone()), Some(syn::token::Colon::default()))
+                            (Some(id.clone()), Some(rust::token::Colon::default()))
                         ).unwrap_or((None, None))
                     }};
 
@@ -174,22 +174,22 @@ impl Frame {
             if is_struct_like {
                 (
                     syn::Fields::Named(syn::FieldsNamed {
-                        brace_token: syn::token::Brace::default(),
+                        brace_token: rust::token::Brace::default(),
                         named: own_variant_fields,
                     }),
                     syn::Fields::Named(syn::FieldsNamed {
-                        brace_token: syn::token::Brace::default(),
+                        brace_token: rust::token::Brace::default(),
                         named: ref_variant_fields,
                     }),
                 )
             } else {
                 (
                     syn::Fields::Unnamed(syn::FieldsUnnamed {
-                        paren_token: syn::token::Paren::default(),
+                        paren_token: rust::token::Paren::default(),
                         unnamed: own_variant_fields,
                     }),
                     syn::Fields::Unnamed(syn::FieldsUnnamed {
-                        paren_token: syn::token::Paren::default(),
+                        paren_token: rust::token::Paren::default(),
                         unnamed: ref_variant_fields,
                     }),
                 )

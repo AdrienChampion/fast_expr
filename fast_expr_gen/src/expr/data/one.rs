@@ -18,7 +18,7 @@ pub enum Wrap {
     Plain,
     Box(rust::Span),
     Ref {
-        and_token: syn::token::And,
+        and_token: rust::token::And,
         lifetime: rust::Lifetime,
     },
     // Option(rust::Span),

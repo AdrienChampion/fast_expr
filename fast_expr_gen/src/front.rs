@@ -110,7 +110,7 @@ impl Parse for LitOrId {
 }
 
 pub struct Conf {
-    pub fields: Punctuated<ConfField, syn::token::Comma>,
+    pub fields: Punctuated<ConfField, rust::token::Comma>,
 }
 impl Conf {
     pub fn fast_expr_attr_key() -> syn::Path {
@@ -129,7 +129,7 @@ impl Parse for Conf {
 
 pub struct ConfField {
     pub id: rust::Id,
-    pub val: Option<(syn::token::Eq, LitOrId)>,
+    pub val: Option<(rust::token::Eq, LitOrId)>,
 }
 impl ConfField {
     pub fn into_bool(self) -> Res<(rust::Span, bool)> {
@@ -153,7 +153,7 @@ impl Parse for ConfField {
     fn parse(input: ParseStream) -> Res<Self> {
         let id = input.parse()?;
 
-        let val = if input.peek(syn::token::Comma) {
+        let val = if input.peek(rust::token::Comma) {
             None
         } else {
             let colon = input.parse()?;
