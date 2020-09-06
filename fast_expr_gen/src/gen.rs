@@ -128,11 +128,13 @@ pub mod typ {
 pub mod trai {
     use super::*;
 
+    pub const ZIPPER_SUFF: &str = "Zipper";
+
     pub fn stepper(id: impl Display) -> Id {
         Id::new(&format!("{}{}", id, "Stepper"), span())
     }
     pub fn zipper(id: impl Display) -> Id {
-        Id::new(&format!("{}{}", id, "Zipper"), span())
+        Id::new(&format!("{}{}", id, ZIPPER_SUFF), span())
     }
 
     pub mod lib {
@@ -147,6 +149,17 @@ pub mod trai {
         pub fn zipper_res_typ() -> Id {
             Id::new("Res", span())
         }
+    }
+}
+
+pub mod macr {
+    use super::*;
+
+    pub fn zipper_impl(e_id: &Id, is_own: IsOwn) -> Id {
+        let e_id = rust::try_snake_from(e_id);
+        let suff = rust::try_snake_from(&Id::new(trai::ZIPPER_SUFF, span()));
+        let own = if is_own { "own" } else { "ref" };
+        Id::new(&format!("impl_{}_{}_{}", e_id, suff, own), span())
     }
 }
 

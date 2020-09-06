@@ -7,6 +7,8 @@ pub mod variant;
 
 pub use self::{data::Data, variant::Variant};
 
+pub type Variants = idx::VariantMap<Variant>;
+
 pub type Exprs = idx::ExprMap<Expr>;
 
 #[derive(Debug, Clone)]
@@ -15,7 +17,7 @@ pub struct Expr {
 
     generics: rust::Generics,
 
-    variants: idx::VariantMap<Variant>,
+    variants: Variants,
     variant_map: Map<rust::Id, idx::Variant>,
 
     src: rust::Enum,

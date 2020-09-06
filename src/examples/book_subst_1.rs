@@ -21,6 +21,8 @@ pub trait Spec: Clone {
 fast_expr! {
     #![fast_expr(
         all_pub = true,
+        top = Expr,
+        ref_impl_macro = subst_example_own_impl,
     )]
 
     /// Expression type.
@@ -69,37 +71,30 @@ where
     }
 }
 
-// #[track_caller]
-// macro_rules! zipper_impl_ref {
-//     (@($($expected:ident),*)($($got:ident),*)
-//         Expr $(<$($t_params:ty),* $(,)?>)*
-//     ) => {
-//     };
-//     (@($($expected:ident),*)($($got:ident),*)) => {
-//         fast_expr::missing_cases! {
-//             "expression handler(s)",
-//             expected($($expected),*),
-//             got($($got),*),
-//         }
-//     };
-//     ($($stuff:tt)*) => {
-//         zipper_impl_ref! {
-//             @(Expr, BExp, IExpr)()
-//             $($stuff)*
-//         }
-//     };
-// }
-
-// pub fn blah() {
-//     zipper_impl_ref! {
-//         Expr<'a, S>
-//     }
-// }
-
 impl<'map, S> zip_own::ExprZipper<S> for Subst<'map, S>
 where
     S: Spec,
 {
+    // subst_example_own_impl! {
+    //     Expr<S> where Res = Expr<S> {
+    //         variants: |&mut self| {
+    //             Cst(val) => {
+    //                 go_up: Expr::Cst(val),
+    //             }
+    //             Var(id) => {
+    //                 go_up: self.map.get(&id).cloned().unwrap_or_else(|| Expr::Var(var)),
+    //             }
+    //             App { op, head, tail } => {
+    //                 go_up: Expr::App {
+    //                     op, head: Box::new(head), tail,
+    //                 }
+    //             }
+    //         },
+
+    //         inspect: |&mut self, _expr| todo!(),
+    //     }
+    // }
+
     type ExprRes = Expr<S>;
     type ExprAppTailAcc = Vec<Expr<S>>;
 
@@ -138,3 +133,52 @@ where
         fast_expr::ZipDo::GoDown(acc)
     }
 }
+
+// impl<'map, S> zip_own::ExprZipper<S> for Subst<'map, S>
+// where
+//     S: Spec,
+// {
+//     subst_example_ref_impl! {
+//         Expr where Res = Expr<S> {
+
+//         }
+//     }
+
+//     type ExprRes = Expr<S>;
+//     type ExprAppTailAcc = Vec<Expr<S>>;
+
+//     fn go_up_expr_var(&mut self, var: S::Id) -> Expr<S> {
+//         self.map
+//             .get(&var)
+//             .cloned()
+//             .unwrap_or_else(|| Expr::Var(var))
+//     }
+//     fn go_up_expr_cst(&mut self, val: S::Val) -> Expr<S> {
+//         Expr::Cst(val)
+//     }
+//     fn go_up_expr_app(&mut self, op: S::Op, head: Expr<S>, tail: Vec<Expr<S>>) -> Expr<S> {
+//         Expr::App {
+//             op,
+//             head: Box::new(head),
+//             tail,
+//         }
+//     }
+
+//     fn coll_init_expr_app_tail(
+//         &mut self,
+//         _op: &S::Op,
+//         _head: &Self::ExprRes,
+//         tail: &Vec<Expr<S>>,
+//     ) -> fast_expr::ZipDo<Self::ExprAppTailAcc, Expr<S>, Self::ExprRes> {
+//         fast_expr::ZipDo::GoDown(Vec::with_capacity(tail.len()))
+//     }
+//     fn coll_fold_expr_app_tail(
+//         &mut self,
+//         _op: &S::Op,
+//         _head: &Self::ExprRes,
+//         (mut acc, next_res): (Self::ExprAppTailAcc, Self::ExprRes),
+//     ) -> fast_expr::ZipDo<Self::ExprAppTailAcc, Expr<S>, Self::ExprRes> {
+//         acc.push(next_res);
+//         fast_expr::ZipDo::GoDown(acc)
+//     }
+// }

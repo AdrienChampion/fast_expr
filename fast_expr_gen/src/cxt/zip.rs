@@ -3,20 +3,32 @@ use super::*;
 pub mod zip_struct;
 pub mod zipper_trait;
 
-use self::{zip_struct::ZipStruct, zipper_trait::ZipperTrait};
+use self::{
+    zip_struct::ZipStruct,
+    zipper_trait::{CollHandlers, Inspecter, VariantHandlers, ZipperTrait},
+};
 
 pub type Infos = idx::ExprMap<Info>;
 pub struct Info {
     zip_struct: ZipStruct,
     zipper_trait: ZipperTrait,
+    variant_handlers: VariantHandlers,
+    coll_handlers: CollHandlers,
+    inspecter: Inspecter,
 }
 impl Info {
     pub fn new(cxt: &cxt::FrameCxt, e_idx: idx::Expr) -> Self {
         let zip_struct = ZipStruct::new(cxt, e_idx);
         let zipper_trait = ZipperTrait::new(cxt, e_idx);
+        let variant_handlers = VariantHandlers::from(cxt, e_idx);
+        let coll_handlers = CollHandlers::from(cxt, e_idx);
+        let inspecter = Inspecter::new(cxt, e_idx);
         Self {
             zip_struct,
             zipper_trait,
+            variant_handlers,
+            coll_handlers,
+            inspecter,
         }
     }
 }
@@ -28,7 +40,9 @@ pub struct ECxt {
     zip_struct: ZipStruct,
     zipper_trait: ZipperTrait,
 
-    ids: gen::ZipBoundIds,
+    variant_handlers: VariantHandlers,
+    coll_handlers: CollHandlers,
+    inspecter: Inspecter,
 }
 implement! {
     impl ECxt {
@@ -44,21 +58,20 @@ impl ECxt {
         Info {
             zip_struct,
             zipper_trait,
+            variant_handlers,
+            coll_handlers,
+            inspecter,
         }: Info,
     ) -> Self {
-        let ids = gen::ZipBoundIds::new(cxt.expr());
-
         Self {
             cxt,
             zip_struct,
             zipper_trait,
 
-            ids,
+            variant_handlers,
+            coll_handlers,
+            inspecter,
         }
-    }
-
-    pub fn self_ids(&self) -> &gen::ZipBoundIds {
-        &self.ids
     }
 
     pub fn zip_struct(&self) -> &ZipStruct {
@@ -67,24 +80,15 @@ impl ECxt {
     pub fn zipper_trait(&self) -> &ZipperTrait {
         &self.zipper_trait
     }
-}
 
-impl ECxt {
-    pub fn fun_inspect_self_def_tokens(&self, cxt: &cxt::ZipCxt, is_own: IsOwn) -> TokenStream {
-        let id = &self.self_ids().inspect_fun;
-        let e_typ = self.plain_typ_for(is_own);
-        let res_typ = {
-            let res = self.res_typ_id();
-            let res = quote!(Self::#res);
-            cxt.lib_gen().zip_do_instantiate(&e_typ, &e_typ, &res)
-        };
-        let def = cxt.lib_gen().zip_do_new_go_down(quote!(expr));
-
-        quote! {
-            fn #id (&mut self, expr: #e_typ) -> #res_typ {
-                #def
-            }
-        }
+    pub fn variant_handlers(&self) -> &VariantHandlers {
+        &self.variant_handlers
+    }
+    pub fn coll_handlers(&self) -> &CollHandlers {
+        &self.coll_handlers
+    }
+    pub fn inspecter(&self) -> &Inspecter {
+        &self.inspecter
     }
 }
 
@@ -102,8 +106,24 @@ impl ECxt {
         self.zip_struct.to_tokens(cxt, is_own)
     }
 
+    /// Generates the tokens for the trait definition for this expression type.
     pub fn zip_trait_tokens(&self, cxt: &cxt::ZipCxt, is_own: IsOwn) -> TokenStream {
         self.zipper_trait.to_tokens(cxt, is_own)
+    }
+
+    /// Generates the zipper trait items for this expression type.
+    ///
+    /// Used when generating a zipper trait for an expression type that mentions this expression
+    /// type.
+    pub fn self_zip_trait_tokens(&self, cxt: &cxt::ZipCxt, is_own: IsOwn) -> TokenStream {
+        let variants = self.variant_handlers.to_zipper_trait_tokens(cxt, is_own);
+        let colls = self.coll_handlers.to_zipper_trait_tokens(cxt, is_own);
+        let inspecter = self.inspecter.to_zipper_trait_tokens(cxt, is_own);
+        quote! {
+            #variants
+            #colls
+            #inspecter
+        }
     }
 }
 

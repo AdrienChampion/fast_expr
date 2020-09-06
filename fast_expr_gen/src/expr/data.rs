@@ -155,8 +155,7 @@ impl Data {
                 let iter_field = cxt.lib_gen().coll_der_iter_field();
 
                 let fold = {
-                    let folder = &cxt[many.e_idx()].zipper_trait().coll_folders()[many.e_idx()]
-                        [many.c_idx()];
+                    let folder = cxt[many.e_idx()].coll_handlers()[many.c_idx()].folder();
                     let fold = folder.to_call_tokens(cxt, res);
                     let step_field = &cxt.zip_ids().self_step_field();
                     cxt.lib_gen()
@@ -284,8 +283,8 @@ impl Data {
 
             DataTyp::Many(many) => {
                 let init = if with_init {
-                    let initializer = &cxt[many.e_idx()].zipper_trait().coll_initializers()
-                        [many.e_idx()][many.c_idx()];
+                    let initializer =
+                        &cxt[many.e_idx()].coll_handlers()[many.c_idx()].initializer();
                     let acc = {
                         let init = initializer.to_call_tokens();
                         let step_field = &cxt.zip_ids().self_step_field();
@@ -329,8 +328,7 @@ impl Data {
                 } else {
                     let zip_fun = &cxt[many.inner()].self_ids().zip_fun;
                     let fold_to_down = {
-                        let folder = &cxt[many.e_idx()].zipper_trait().coll_folders()[many.e_idx()]
-                            [many.c_idx()];
+                        let folder = &cxt[many.e_idx()].coll_handlers()[many.c_idx()].folder();
                         let fold = folder.to_call_tokens(cxt, &next_id);
                         let step_field = &cxt.zip_ids().self_step_field();
                         cxt.lib_gen()

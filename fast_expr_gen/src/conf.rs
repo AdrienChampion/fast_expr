@@ -63,6 +63,10 @@ impl<T> Val<T> {
             from_user_span: self.from_user_span.clone(),
         }
     }
+
+    pub fn unwrap(self) -> T {
+        self.val
+    }
 }
 implement! {
     impl(T) Val<T> {
@@ -77,13 +81,25 @@ implement! {
 pub struct EConf {
     /// Controls whether to actually generate the expression's `Zip` struct and `Zipper` trait.
     pub zip_gen: Val<bool>,
+    /// Ref-impl-macro name.
+    pub ref_impl_macro_name: Val<Option<rust::Id>>,
+    /// Own-impl-macro name.
+    pub own_impl_macro_name: Val<Option<rust::Id>>,
 }
 
 impl EConf {
     /// Key for the `zip_gen` field.
     const KEY_ZIP_GEN: &'static str = "zip_gen";
+    /// Key for the `ref_impl_macro_name` field.
+    const REF_IMPL_MACRO_NAME_GEN: &'static str = "ref_impl_macro";
+    /// Key for the `own_impl_macro_name` field.
+    const OWN_IMPL_MACRO_NAME_GEN: &'static str = "own_impl_macro";
     /// All keys accepted by `Self`.
-    const KEYS: [&'static str; 1] = [Self::KEY_ZIP_GEN];
+    const KEYS: [&'static str; 3] = [
+        Self::KEY_ZIP_GEN,
+        Self::REF_IMPL_MACRO_NAME_GEN,
+        Self::OWN_IMPL_MACRO_NAME_GEN,
+    ];
     /// String containing a comma-separated enumeration of the legal keys for `Self`.
     fn key_list() -> String {
         let mut s = String::new();
@@ -104,14 +120,35 @@ impl EConf {
     pub fn new(conf: &Conf, expr: &mut rust::Enum) -> Res<Self> {
         // Build the default expr-conf induced by `conf`.
         let mut slf = {
+            let mut is_top_expr = false;
             let zip_gen = conf.top_expr.ref_map(|top_opt| {
                 top_opt
                     .as_ref()
-                    .map(|top| &expr.ident == top)
+                    .map(|top| {
+                        if &expr.ident == top {
+                            is_top_expr = true;
+                            true
+                        } else {
+                            false
+                        }
+                    })
                     .unwrap_or(true)
             });
 
-            Self { zip_gen }
+            let (ref_impl_macro_name, own_impl_macro_name) = if is_top_expr {
+                (
+                    conf.ref_impl_macro_name.clone(),
+                    conf.own_impl_macro_name.clone(),
+                )
+            } else {
+                (Val::new_default(None), Val::new_default(None))
+            };
+
+            Self {
+                zip_gen,
+                ref_impl_macro_name,
+                own_impl_macro_name,
+            }
         };
 
         // Modify `slf` based on the attributes.
@@ -130,6 +167,14 @@ impl EConf {
         Ok(slf)
     }
 
+    pub fn impl_macro_name(&self, is_own: IsOwn) -> &Val<Option<rust::Id>> {
+        if is_own {
+            &self.own_impl_macro_name
+        } else {
+            &self.ref_impl_macro_name
+        }
+    }
+
     /// Applies the changes specified by `front_conf`.
     fn handle_front_conf(&mut self, front_conf: front::Conf) -> Res<()> {
         for field in front_conf.fields {
@@ -143,6 +188,12 @@ impl EConf {
         if field.id == Self::KEY_ZIP_GEN {
             let (id_span, b) = field.into_bool()?;
             self.zip_gen.set(b, id_span)
+        } else if field.id == Self::REF_IMPL_MACRO_NAME_GEN {
+            let (id_span, id) = field.into_id()?;
+            self.ref_impl_macro_name.set(id, id_span)
+        } else if field.id == Self::OWN_IMPL_MACRO_NAME_GEN {
+            let (id_span, id) = field.into_id()?;
+            self.own_impl_macro_name.set(id, id_span)
         } else {
             bail!(on(
                 field.id,
@@ -174,6 +225,11 @@ pub struct Conf {
     pub ref_gen: Val<bool>,
     /// Controls whether we should generate the owned-zipper(s).
     pub own_gen: Val<bool>,
+
+    /// Ref-impl-macro name.
+    pub ref_impl_macro_name: Val<Option<rust::Id>>,
+    /// Own-impl-macro name.
+    pub own_impl_macro_name: Val<Option<rust::Id>>,
 }
 impl Conf {
     /// Key for the `fast_expr_name` field.
@@ -186,13 +242,20 @@ impl Conf {
     const KEY_REF_GEN: &'static str = "ref_gen";
     /// Key for the `own_gen` field.
     const KEY_OWN_GEN: &'static str = "own_gen";
+    /// Key for the `ref_impl_macro_name` field.
+    const REF_IMPL_MACRO_NAME_GEN: &'static str = "ref_impl_macro";
+    /// Key for the `own_impl_macro_name` field.
+    const OWN_IMPL_MACRO_NAME_GEN: &'static str = "own_impl_macro";
+
     /// All keys accepted by `Self`.
-    const KEYS: [&'static str; 5] = [
+    const KEYS: [&'static str; 7] = [
         Self::KEY_FAST_EXPR_NAME,
         Self::KEY_TOP_EXPR,
         Self::KEY_ALL_PUB,
         Self::KEY_REF_GEN,
         Self::KEY_OWN_GEN,
+        Self::REF_IMPL_MACRO_NAME_GEN,
+        Self::OWN_IMPL_MACRO_NAME_GEN,
     ];
     /// String containing a comma-separated enumeration of the legal keys for `Self`.
     fn key_list() -> String {
@@ -292,6 +355,12 @@ impl Conf {
         } else if field.id == Self::KEY_OWN_GEN {
             let (id_span, b) = field.into_bool()?;
             self.own_gen.set(b, id_span)
+        } else if field.id == Self::REF_IMPL_MACRO_NAME_GEN {
+            let (id_span, id) = field.into_id()?;
+            self.ref_impl_macro_name.set(id, id_span)
+        } else if field.id == Self::OWN_IMPL_MACRO_NAME_GEN {
+            let (id_span, id) = field.into_id()?;
+            self.own_impl_macro_name.set(id, id_span)
         } else {
             bail!(on(
                 field.id,
@@ -314,6 +383,9 @@ impl Default for Conf {
 
             ref_gen: Val::new_default(true),
             own_gen: Val::new_default(true),
+
+            ref_impl_macro_name: Val::new_default(None),
+            own_impl_macro_name: Val::new_default(None),
         }
     }
 }

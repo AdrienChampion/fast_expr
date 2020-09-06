@@ -14,13 +14,13 @@
             Expr<S> where Res = <type> {
 
                 variants: |&mut self| {
-                    Var(var: S::Var) => {
+                    Var(var) => {
                         go_up => <expr>,
                     },
-                    Cst(cst: S::Cst) => {
+                    Cst(cst) => {
                         go_up => <expr>,
                     },
-                    App { op: S::Op, head: Expr<S>, tail: Vec<Expr<S>> } => {
+                    App { op, head, tail } => {
                         go_up => <expr>,
                         coll(tail: std::vec::IntoIter<S>) where Acc = <type> => {
                             init => <expr>,

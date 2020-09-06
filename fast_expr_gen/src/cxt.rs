@@ -545,6 +545,7 @@ impl ZipTop {
 
         stream.extend(quote! {
             #[doc = #zip_doc]
+            #[macro_use]
             pub mod #zip_mod {
                 use super::*;
 

@@ -423,6 +423,8 @@ pub struct ECxt {
     fp_e_deps: Set<idx::Expr>,
     frames: VFrames,
     expr: expr::Expr,
+
+    ids: gen::ZipBoundIds,
 }
 implement! {
     impl ECxt {
@@ -434,12 +436,18 @@ implement! {
 
 impl ECxt {
     pub fn new(pre: pre::ECxt, Info { fp_e_deps, frames }: Info, expr: expr::Expr) -> Self {
+        let ids = gen::ZipBoundIds::new(&expr);
         Self {
             pre,
             fp_e_deps,
             frames,
             expr,
+            ids,
         }
+    }
+
+    pub fn self_ids(&self) -> &gen::ZipBoundIds {
+        &self.ids
     }
 
     pub fn fp_e_deps(&self) -> &Set<idx::Expr> {

@@ -51,6 +51,93 @@ impl FnParam {
 }
 
 #[derive(Debug, Clone)]
+pub struct Inspecter {
+    e_idx: idx::Expr,
+
+    id: rust::Id,
+
+    assoc_res_typ: rust::Id,
+}
+impl Inspecter {
+    pub fn new(cxt: &cxt::FrameCxt, e_idx: idx::Expr) -> Self {
+        let id = cxt[e_idx].self_ids().inspect_fun.clone();
+        let assoc_res_typ = cxt[e_idx].res_typ_id().clone();
+        Self {
+            e_idx,
+            id,
+            assoc_res_typ,
+        }
+    }
+
+    pub fn fun_inspect_self_sig_tokens(
+        &self,
+        cxt: &cxt::ZipCxt,
+        is_own: IsOwn,
+        expr_param: impl ToTokens,
+        expr_typ: Option<TokenStream>,
+    ) -> TokenStream {
+        let e_cxt = &cxt[self.e_idx];
+        let id = &self.id;
+        let e_typ = expr_typ.unwrap_or_else(|| e_cxt.plain_typ_for(is_own).to_token_stream());
+        let res_typ = {
+            let res = e_cxt.res_typ_id();
+            let res = quote!(Self::#res);
+            cxt.lib_gen().zip_do_instantiate(&e_typ, &e_typ, &res)
+        };
+        quote! {
+            fn #id (&mut self, #expr_param: #e_typ) -> #res_typ
+        }
+    }
+    pub fn fun_inspect_self_def_tokens(&self, cxt: &cxt::ZipCxt, is_own: IsOwn) -> TokenStream {
+        let expr_param = quote!(expr);
+        let sig = self.fun_inspect_self_sig_tokens(cxt, is_own, &expr_param, None);
+        let def = cxt.lib_gen().zip_do_new_go_down(expr_param);
+
+        quote! {
+            #sig {
+                #def
+            }
+        }
+    }
+
+    pub fn to_zipper_trait_tokens(&self, cxt: &cxt::ZipCxt, is_own: IsOwn) -> TokenStream {
+        let expr_param = quote!(expr);
+        let sig = self.fun_inspect_self_sig_tokens(cxt, is_own, &expr_param, None);
+        let def = cxt.lib_gen().zip_do_new_go_down(expr_param);
+
+        let assoc = &self.assoc_res_typ;
+
+        quote! {
+            type #assoc;
+            #sig {
+                #def
+            }
+        }
+    }
+}
+
+pub type VariantHandlers = idx::VariantMap<VariantHandler>;
+impl VariantHandlers {
+    pub fn from(cxt: &cxt::FrameCxt, e_idx: idx::Expr) -> Self {
+        cxt[e_idx]
+            .expr()
+            .variants()
+            .iter()
+            .map(|variant| VariantHandler::new(cxt, e_idx, variant))
+            .collect()
+    }
+
+    pub fn to_zipper_trait_tokens(&self, cxt: &cxt::ZipCxt, is_own: IsOwn) -> TokenStream {
+        let handlers = self
+            .iter()
+            .map(|handler| handler.to_zipper_trait_tokens(cxt, is_own));
+        quote! {
+            #(#handlers)*
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct VariantHandler {
     e_idx: idx::Expr,
     v_idx: idx::Variant,
@@ -61,7 +148,10 @@ pub struct VariantHandler {
 }
 impl VariantHandler {
     pub fn new(cxt: &cxt::FrameCxt, e_idx: idx::Expr, variant: &expr::Variant) -> Self {
+        let e_cxt = &cxt[e_idx];
         let v_idx = variant.v_idx();
+
+        let assoc_res_typ = e_cxt.res_typ_id();
 
         let go_up_id = variant.zipper_go_up_id().clone();
         let go_up_params = variant
@@ -69,10 +159,7 @@ impl VariantHandler {
             .iter()
             .map(|data| FnParam::from_data(cxt, data))
             .collect();
-        let go_up_res = {
-            let typ = cxt[e_idx].res_typ_id();
-            syn::parse_quote!(Self :: #typ)
-        };
+        let go_up_res = syn::parse_quote!(Self :: #assoc_res_typ);
 
         Self {
             e_idx,
@@ -95,6 +182,10 @@ impl VariantHandler {
             fn #id (&mut self, #(#params,)* ) -> #res;
         }
     }
+
+    pub fn to_zipper_trait_tokens(&self, _cxt: &cxt::ZipCxt, is_own: IsOwn) -> TokenStream {
+        self.to_go_up_tokens(is_own)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -107,10 +198,12 @@ pub struct CollFolder {
     id: rust::Id,
 
     params: idx::DataMap<FnParam>,
+    assoc_acc_typ: rust::Id,
 }
 
 impl CollFolder {
-    pub fn new(cxt: &cxt::FrameCxt, coll: &cxt::CollCxt) -> Self {
+    pub fn new(cxt: &cxt::FrameCxt, coll: &cxt::CollCxt, assoc_acc_typ: &rust::Id) -> Self {
+        let assoc_acc_typ = assoc_acc_typ.clone();
         let e_idx = coll.e_idx();
         let v_idx = coll.v_idx();
         let d_idx = coll.d_idx();
@@ -137,13 +230,12 @@ impl CollFolder {
                         rust::typ::reference(None, p_data.zip_res(cxt, false)),
                     )
                 } else if p_d_idx == d_idx {
-                    let acc = e_cxt.colls()[c_idx].acc_t_param_id();
                     let inner = p_data
                         .inner()
                         .expect("trying to build a folder over non-recursive data");
                     let res = cxt[inner].res_typ_id();
                     let typ: rust::Typ = syn::parse_quote! {
-                        (Self::#acc, Self::#res)
+                        (Self::#assoc_acc_typ, Self::#res)
                     };
                     FnParam::new(id, typ.clone(), typ)
                 } else {
@@ -166,6 +258,8 @@ impl CollFolder {
             id,
 
             params,
+
+            assoc_acc_typ,
         }
     }
 
@@ -173,7 +267,7 @@ impl CollFolder {
         let id = &self.id;
         let params = self.params.iter().map(|param| param.to_tokens(is_own));
         let zip_do = {
-            let acc_t_param = cxt[self.e_idx].colls()[self.c_idx].acc_t_param_id();
+            let acc_t_param = &self.assoc_acc_typ;
             let expr_typ = cxt[self.e_idx].plain_typ_for(is_own);
             let res_typ = cxt[self.e_idx].res_typ_id();
             cxt.lib_gen().zip_do_instantiate(
@@ -217,9 +311,12 @@ pub struct CollInitializer {
     id: rust::Id,
 
     params: idx::DataMap<FnParam>,
+
+    assoc_acc_typ: rust::Id,
 }
 impl CollInitializer {
-    pub fn new(cxt: &cxt::FrameCxt, coll: &cxt::CollCxt) -> Self {
+    pub fn new(cxt: &cxt::FrameCxt, coll: &cxt::CollCxt, assoc_acc_typ: &rust::Id) -> Self {
+        let assoc_acc_typ = assoc_acc_typ.clone();
         let e_idx = coll.e_idx();
         let v_idx = coll.v_idx();
         let d_idx = coll.d_idx();
@@ -265,6 +362,8 @@ impl CollInitializer {
             id,
 
             params,
+
+            assoc_acc_typ,
         }
     }
 
@@ -272,7 +371,7 @@ impl CollInitializer {
         let id = &self.id;
         let params = self.params.iter().map(|param| param.to_tokens(is_own));
         let zip_do = {
-            let acc_t_param = cxt[self.e_idx].colls()[self.c_idx].acc_t_param_id();
+            let acc_t_param = &self.assoc_acc_typ;
             let expr_typ = cxt[self.e_idx].plain_typ_for(is_own);
             let res_typ = cxt[self.e_idx].res_typ_id();
             cxt.lib_gen().zip_do_instantiate(
@@ -298,18 +397,73 @@ impl CollInitializer {
     }
 }
 
+pub type CollHandlers = idx::CollMap<CollHandler>;
+impl CollHandlers {
+    pub fn from(cxt: &cxt::FrameCxt, e_idx: idx::Expr) -> Self {
+        cxt[e_idx]
+            .colls()
+            .iter()
+            .map(|coll| CollHandler::new(cxt, coll))
+            .collect()
+    }
+    pub fn to_zipper_trait_tokens(&self, cxt: &cxt::ZipCxt, is_own: IsOwn) -> TokenStream {
+        let handlers = self
+            .iter()
+            .map(|handler| handler.to_zipper_trait_tokens(cxt, is_own));
+        quote! {
+            #(#handlers)*
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct CollHandler {
+    initializer: CollInitializer,
+    folder: CollFolder,
+
+    assoc_acc_typ: rust::Id,
+}
+impl CollHandler {
+    pub fn new(cxt: &cxt::FrameCxt, coll: &cxt::CollCxt) -> Self {
+        let assoc_acc_typ = coll.acc_t_param_id().clone();
+        let initializer = CollInitializer::new(cxt, coll, &assoc_acc_typ);
+        let folder = CollFolder::new(cxt, coll, &assoc_acc_typ);
+        Self {
+            initializer,
+            folder,
+            assoc_acc_typ,
+        }
+    }
+
+    pub fn initializer(&self) -> &CollInitializer {
+        &self.initializer
+    }
+    pub fn folder(&self) -> &CollFolder {
+        &self.folder
+    }
+    pub fn assoc_acc_typ(&self) -> &rust::Id {
+        &self.assoc_acc_typ
+    }
+
+    pub fn to_zipper_trait_tokens(&self, cxt: &cxt::ZipCxt, is_own: IsOwn) -> TokenStream {
+        let assoc = &self.assoc_acc_typ;
+        let init = self.initializer.to_decl_tokens(cxt, is_own);
+        let fold = self.folder.to_decl_tokens(cxt, is_own);
+        quote! {
+            type #assoc;
+            #init
+            #fold
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct ZipperTrait {
     e_idx: idx::Expr,
     id: rust::Id,
+
     own_generics: rust::Generics,
     ref_generics: rust::Generics,
-
-    assoc_typs: Vec<rust::Id>,
-
-    variant_handlers: idx::VariantMap<VariantHandler>,
-    initializers: idx::ExprMap<idx::CollMap<CollInitializer>>,
-    folders: idx::ExprMap<idx::CollMap<CollFolder>>,
 }
 impl ZipperTrait {
     pub fn new(cxt: &cxt::FrameCxt, e_idx: idx::Expr) -> Self {
@@ -331,70 +485,11 @@ impl ZipperTrait {
             gen
         };
 
-        let assoc_typs = e_cxt
-            .fp_e_deps()
-            .iter()
-            .cloned()
-            .map(|dep_e_idx| {
-                Some(cxt[dep_e_idx].res_typ_id().clone()).into_iter().chain(
-                    cxt[dep_e_idx]
-                        .colls()
-                        .iter()
-                        .map(|coll| coll.acc_t_param_id().clone()),
-                )
-            })
-            .flatten()
-            .collect();
-
-        let variant_handlers = e_cxt
-            .fp_e_deps()
-            .iter()
-            .cloned()
-            .map(|dep_e_idx| {
-                cxt[dep_e_idx]
-                    .expr()
-                    .variants()
-                    .iter()
-                    .map(move |variant| VariantHandler::new(cxt, dep_e_idx, variant))
-            })
-            .flatten()
-            .collect();
-
-        let initializers = cxt
-            .e_cxts()
-            .iter()
-            .map(|e_cxt| {
-                e_cxt
-                    .colls()
-                    .iter()
-                    .map(|coll| CollInitializer::new(cxt, coll))
-                    .collect()
-            })
-            .collect();
-
-        let folders = cxt
-            .e_cxts()
-            .iter()
-            .map(|e_cxt| {
-                e_cxt
-                    .colls()
-                    .iter()
-                    .map(|coll| CollFolder::new(cxt, coll))
-                    .collect()
-            })
-            .collect();
-
         Self {
             e_idx,
             id,
             own_generics,
             ref_generics,
-
-            assoc_typs,
-
-            variant_handlers,
-            initializers,
-            folders,
         }
     }
 
@@ -405,67 +500,174 @@ impl ZipperTrait {
             &self.ref_generics
         }
     }
-
-    pub fn variant_handlers(&self) -> &idx::VariantMap<VariantHandler> {
-        &self.variant_handlers
-    }
-    pub fn coll_initializers(&self) -> &idx::ExprMap<idx::CollMap<CollInitializer>> {
-        &self.initializers
-    }
-    pub fn coll_folders(&self) -> &idx::ExprMap<idx::CollMap<CollFolder>> {
-        &self.folders
-    }
 }
 
 impl ZipperTrait {
     pub fn to_tokens(&self, cxt: &cxt::ZipCxt, is_own: IsOwn) -> TokenStream {
         let id = &self.id;
         let (params, _, where_clause) = self.generics(is_own).split_for_impl();
-        let assoc_typs = &self.assoc_typs;
 
-        let handlers = self
-            .variant_handlers
-            .iter()
-            .map(|handler| handler.to_go_up_tokens(is_own));
-
-        let inspecters = cxt[self.e_idx]
+        let expr_tokens = cxt[self.e_idx]
             .fp_e_deps()
             .iter()
             .cloned()
-            .map(|dep_e_idx| cxt[dep_e_idx].fun_inspect_self_def_tokens(cxt, is_own));
+            .map(|dep_e_idx| cxt[dep_e_idx].self_zip_trait_tokens(cxt, is_own));
 
-        let initializers = self
-            .initializers
-            .iter()
-            .map(|initializers| {
-                initializers
-                    .iter()
-                    .map(|initializer| initializer.to_decl_tokens(cxt, is_own))
-            })
-            .flatten();
-
-        let folders = self
-            .folders
-            .iter()
-            .map(|folders| {
-                folders
-                    .iter()
-                    .map(|folder| folder.to_decl_tokens(cxt, is_own))
-            })
-            .flatten();
+        // let macro_def = self.macro_def(cxt, is_own);
 
         quote! {
             pub trait #id #params #where_clause {
-                #(type #assoc_typs;)*
-
-                #(#handlers)*
-
-                #(#inspecters)*
-
-                #(#initializers)*
-
-                #(#folders)*
+                #(#expr_tokens)*
             }
+
+            // #macro_def
         }
     }
+
+    // pub fn macro_def(&self, cxt: &cxt::ZipCxt, is_own: IsOwn) -> TokenStream {
+    //     let macro_id = if let Some(id) = cxt[self.e_idx].e_conf().impl_macro_name(is_own).deref() {
+    //         id
+    //     } else {
+    //         return quote! {};
+    //     };
+
+    //     let (lft_side, rgt_side): (Vec<_>, Vec<_>) =
+    //         cxt[self.e_idx]
+    //             .fp_e_deps()
+    //             .iter()
+    //             .cloned()
+    //             .map(|dep_e_idx| {
+    //                 let e_cxt = &cxt[dep_e_idx];
+    //                 let e_id = e_cxt.e_id();
+    //                 let e_res = e_cxt.res_typ_id();
+
+    //                 let t_params = e_cxt.generics().params.iter().enumerate().map(
+    //                     |(index, param)| match param {
+    //                         rust::GenericParam::Type(_) => (
+    //                             rust::Id::new(&format!("t_param_{}", index), gen::span()),
+    //                             false,
+    //                         ),
+    //                         rust::GenericParam::Lifetime(_) => (
+    //                             rust::Id::new(&format!("t_param_{}", index), gen::span()),
+    //                             true,
+    //                         ),
+    //                         rust::GenericParam::Const(_) => {
+    //                             panic!("unexpected const type parameter in `{}`", e_id)
+    //                         }
+    //                     },
+    //                 );
+
+    //                 let e_binding = if e_cxt.generics().params.is_empty() {
+    //                     quote!(#e_id)
+    //                 } else {
+    //                     let lft_t_params = t_params.clone().map(|(name, is_lt)| {
+    //                         if is_lt {
+    //                             quote! { $#name:lifetime }
+    //                         } else {
+    //                             quote! { $#name:ty }
+    //                         }
+    //                     });
+    //                     quote!(#e_id< #(#lft_t_params)* >)
+    //                 };
+
+    //                 let e_typ = {
+    //                     let t_params = t_params.clone().map(|(id, _)| id);
+    //                     quote!(#e_id < #($#t_params),* >)
+    //                 };
+
+    //                 let inspect_expr_param =
+    //                     rust::Id::new(&format!("{}_expr_param", e_id), gen::span());
+    //                 let inspect_def = gen::ZipIds::inspect_fun(e_id);
+    //                 let inspect_sig = e_cxt.fun_inspect_self_sig_tokens(
+    //                     cxt,
+    //                     is_own,
+    //                     &quote!($#inspect_expr_param),
+    //                     Some(e_typ),
+    //                 );
+
+    //                 let (variants_lft, variants_rgt): (Vec<_>, Vec<_>) = e_cxt
+    //                     .expr()
+    //                     .variants()
+    //                     .iter()
+    //                     .map(|variant| {
+    //                         let v_id = variant.v_id();
+    //                         let fields = variant.data().iter().map(|data| {
+    //                             rust::Id::new(
+    //                                 &format!("{}_{}_{}", e_id, v_id, data.param_id()),
+    //                                 gen::span(),
+    //                             )
+    //                         });
+
+    //                         let lft_binding = match variant.is_struct_like() {
+    //                             Some(true) => quote! {
+    //                                 #v_id { #($#fields:pat),* $(,)? }
+    //                             },
+    //                             Some(false) => quote! {
+    //                                 #v_id ( #($#fields:pat),* $(,)? )
+    //                             },
+    //                             None => quote! { #v_id },
+    //                         };
+
+    //                         let handler =
+    //                             &self.variant_handlers.get(&dep_e_idx).unwrap()[variant.v_idx()];
+    //                         let def_id = &handler.go_up_id;
+
+    //                         (
+    //                             quote! {
+    //                                 #lft_binding => {
+    //                                     go_up: $#def_id:expr $(,)?
+    //                                 }
+    //                             },
+    //                             quote! {},
+    //                         )
+    //                     })
+    //                     .unzip();
+
+    //                 (
+    //                     quote! {
+    //                         #e_binding where Res = $#e_res:ty {
+    //                             variants: |&mut self| {
+    //                                 #(#variants_lft $(,)?)*
+    //                             }
+
+    //                             $(
+    //                                 ,
+    //                                 inspect: |&mut self, $#inspect_expr_param:pat $(,)?|
+    //                                 $#inspect_def:expr
+    //                                 $(,)?
+    //                             )?
+    //                         }
+    //                     },
+    //                     quote! {
+    //                         type #e_res = $#e_res;
+
+    //                         #(#variants_rgt)*
+
+    //                         $(
+    //                             #inspect_sig {
+    //                                 $#inspect_def
+    //                             }
+    //                         )?
+    //                     },
+    //                 )
+    //             })
+    //             .unzip();
+
+    //     let error_msg =
+    //         format!("you are not using this macro correctly, please refer to its documentation");
+
+    //     quote_spanned! { macro_id.span() =>
+    //         #[macro_export]
+    //         macro_rules! #macro_id {
+    //             (
+    //                 #(#lft_side)*
+    //             ) => {
+    //                 #(#rgt_side)*
+    //             };
+    //             ($($stuff:tt)*) => {
+    //                 compile_error! { #error_msg }
+    //             };
+    //         }
+    //     }
+    // }
 }

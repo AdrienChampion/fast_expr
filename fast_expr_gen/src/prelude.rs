@@ -15,7 +15,7 @@ impl<T> AsPath for T where T: AsRef<std::path::Path> {}
 pub use either::Either;
 pub use lazy_static::lazy_static;
 pub use proc_macro2::TokenStream;
-pub use quote::{quote, ToTokens, TokenStreamExt};
+pub use quote::{quote, quote_spanned, ToTokens, TokenStreamExt};
 pub use smallvec::smallvec;
 pub use syn::Error;
 
