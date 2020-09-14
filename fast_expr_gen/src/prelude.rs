@@ -22,6 +22,7 @@ pub use syn::Error;
 pub use crate::{
     check, conf,
     cxt::{self, Cxt},
+    doc,
     err::{self, Result as Res},
     expr, front, gen, log, logln, rust,
 };

@@ -4,13 +4,13 @@ use std::collections::BTreeMap;
 
 // ANCHOR: expr_def
 /// Expression specification.
-pub trait Spec {
+pub trait Spec: Clone {
     /// Values (for constants).
-    type Val;
+    type Val: Clone;
     /// Identifiers (for variables).
-    type Id;
+    type Id: Clone;
     /// Operators (for applications)
-    type Op;
+    type Op: Clone;
 }
 
 /// Expression type.

@@ -17,10 +17,12 @@ pub fn lib_path() -> Id {
 pub mod fun {
     use super::*;
 
+    pub const GO_UP_PREF: &str = "go_up";
+
     pub fn go_up(e_id: &rust::Id, v_id: &rust::Id) -> rust::Id {
         let e_id = rust::try_snake_from(e_id);
         let v_id = rust::try_snake_from(v_id);
-        let id = format!("go_up_{}_{}", e_id, v_id);
+        let id = format!("{}_{}_{}", GO_UP_PREF, e_id, v_id);
         Id::new(&id, span())
     }
     pub fn variant_handler(e_id: &rust::Id, v_id: &rust::Id) -> rust::Id {
@@ -103,21 +105,25 @@ pub mod lifetime {
 pub mod typ {
     use super::*;
 
+    pub const RES_SUFF: &str = "Res";
+    pub const ACC_SUFF: &str = "Acc";
+    pub const ZIP_SUFF: &str = "Zip";
+
     pub fn res(id: impl Display) -> Id {
-        Id::new(&format!("{}{}", id, "Res"), span())
+        Id::new(&format!("{}{}", id, RES_SUFF), span())
     }
     pub fn acc(id: impl Display) -> Id {
-        Id::new(&format!("{}{}", id, "Acc"), span())
+        Id::new(&format!("{}{}", id, ACC_SUFF), span())
     }
     pub fn zip(id: impl Display) -> Id {
-        Id::new(&format!("{}{}", id, "Zip"), span())
+        Id::new(&format!("{}{}", id, ZIP_SUFF), span())
     }
 
     pub mod param {
         use super::*;
 
         pub fn step() -> Id {
-            Id::new("Step", span())
+            Id::new("ZipSpec", span())
         }
         pub fn zip() -> Id {
             Id::new("Zip", span())
@@ -128,7 +134,7 @@ pub mod typ {
 pub mod trai {
     use super::*;
 
-    pub const ZIPPER_SUFF: &str = "Zipper";
+    pub const ZIPPER_SUFF: &str = "ZipSpec";
 
     pub fn stepper(id: impl Display) -> Id {
         Id::new(&format!("{}{}", id, "Stepper"), span())
@@ -224,30 +230,6 @@ pub mod punct {
                 None => break 'puncts,
             };
             action(punct)
-        }
-    }
-}
-
-pub mod doc {
-    pub mod module {
-        prelude! {}
-
-        pub fn zip_ref() -> &'static str {
-            "\
-Zipper over expression references.\
-            "
-        }
-        pub fn zip_own() -> &'static str {
-            "\
-Zipper over owned expressions.\
-            "
-        }
-        pub fn zip(is_own: IsOwn) -> &'static str {
-            if is_own {
-                zip_own()
-            } else {
-                zip_ref()
-            }
         }
     }
 }
@@ -369,11 +351,14 @@ impl Lib {
         }
     }
 
-    pub fn zip_do_map_down(&self) -> Id {
-        Id::new("map_down", span())
+    pub fn zip_do_map_go_down(&self) -> Id {
+        Id::new("map_go_down", span())
     }
-    pub fn zip_do_down_and_then(&self) -> Id {
-        Id::new("down_and_then", span())
+    pub fn zip_do_go_down_and_then(&self) -> Id {
+        Id::new("go_down_and_then", span())
+    }
+    pub fn zip_do_empty_convert(&self) -> Id {
+        Id::new("empty_convert", span())
     }
 
     fn zip_do_new(&self, variant: Id, inner: impl ToTokens) -> TokenStream {
@@ -397,7 +382,7 @@ impl Lib {
         self.zip_do_new(Self::zip_do_early_id(), inner)
     }
 
-    pub fn zip_do_early_return_if_not_down(&self, expr: impl ToTokens) -> TokenStream {
+    pub fn zip_do_early_return_if_not_go_down(&self, expr: impl ToTokens) -> TokenStream {
         let path = &self.path;
         let id = Self::zip_do_id();
         let go_down = Self::zip_do_go_down_id();

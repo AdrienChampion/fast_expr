@@ -17,7 +17,7 @@ use fast_expr_gen::syn;
 ///
 /// For each (by default) expression type `Expr`, both of these modules will contain
 ///
-/// - an `ExprZipper` trait, used to write zippers over your expressions, and
+/// - an `ExprZipSpec` trait, used to write zippers over your expressions, and
 /// - an `ExprZip` struct that leverages the zipper traits to actually zip over an owned expression
 ///   (`zip_own`) or an expression reference (`zip_ref`).
 ///
@@ -453,11 +453,11 @@ use fast_expr_gen::syn;
 /// fn main() {
 /// #     #[allow(dead_code)]
 ///     use zip_ref::{
-///         ExprZip, ExprZipper,
+///         ExprZip, ExprZipSpec,
 ///         // Generated because of the override for zip-generation on `BExpr`.
-///         BExprZip, BExprZipper,
+///         BExprZip, BExprZipSpec,
 ///         // // Not generated because of global `top = Expr`, does not exist.
-///         // IExprZip, IExprZipper,
+///         // IExprZip, IExprZipSpec,
 ///     };
 ///
 ///     // // Not generated because of global `own_gen = false`, does not exist.

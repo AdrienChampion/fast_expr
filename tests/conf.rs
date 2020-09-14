@@ -136,20 +136,20 @@ pub mod ref_and_own {
 fn top_1() {
     {
         #[allow(unused_imports)]
-        use top_1::zip_own::{ExprZip, ExprZipper};
+        use top_1::zip_own::{ExprZip, ExprZipSpec};
     }
     {
         #[allow(unused_imports)]
-        use top_1::zip_ref::{ExprZip, ExprZipper};
+        use top_1::zip_ref::{ExprZip, ExprZipSpec};
     }
     // // Must not compile.
     // {
     //     #[allow(unused_imports)]
-    //     use top_1::zip_own::{BExprZip, BExprZipper};
+    //     use top_1::zip_own::{BExprZip, BExprZipSpec};
     // }
     // {
     //     #[allow(unused_imports)]
-    //     use top_1::zip_ref::{BExprZip, BExprZipper};
+    //     use top_1::zip_ref::{BExprZip, BExprZipSpec};
     // }
 }
 pub mod top_1 {
@@ -182,20 +182,20 @@ pub mod top_1 {
 fn top_2() {
     {
         #[allow(unused_imports)]
-        use top_2::zip_own::{ExprZip, ExprZipper};
+        use top_2::zip_own::{ExprZip, ExprZipSpec};
     }
     {
         #[allow(unused_imports)]
-        use top_2::zip_ref::{ExprZip, ExprZipper};
+        use top_2::zip_ref::{ExprZip, ExprZipSpec};
     }
     // // Must not compile.
     // {
     //     #[allow(unused_imports)]
-    //     use top_1::zip_own::{BExprZip, BExprZipper};
+    //     use top_1::zip_own::{BExprZip, BExprZipSpec};
     // }
     // {
     //     #[allow(unused_imports)]
-    //     use top_1::zip_ref::{BExprZip, BExprZipper};
+    //     use top_1::zip_ref::{BExprZip, BExprZipSpec};
     // }
 }
 pub mod top_2 {

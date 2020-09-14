@@ -9,6 +9,7 @@ pub mod macros;
 pub mod check;
 pub mod conf;
 pub mod cxt;
+pub mod doc;
 pub mod err;
 pub mod expr;
 pub mod front;
@@ -60,13 +61,15 @@ impl<Acc, Iter> CollDer<Acc, Iter> {
     }
 }
 
+pub type ZipUp<Expr, Res> = ZipDo<internal::Empty, Expr, Res>;
+
 /// An order for an expression zipper.
 ///
 /// When implementing the `Zipper` trait for a custom zipper over an expression structure, some of
 /// the functions to implement will return a `ZipDo`. This means these functions have to tell the
 /// zipper what to do next.
 pub enum ZipDo<Down, Expr, Res> {
-    /// The zipper will keep going through the structure normally by going down the inner value.
+    /// The zipper will keep going through the structure following the normal flow.
     GoDown(Down),
     /// Discard the current expression and its sub-expressions, and consider the inner value to be
     /// the result yielded by the current expression.
@@ -78,7 +81,7 @@ pub enum ZipDo<Down, Expr, Res> {
 }
 impl<Down, Expr, Res> ZipDo<Down, Expr, Res> {
     /// Map over the `GoDown` variant.
-    pub fn map_down<NewDown>(
+    pub fn map_go_down<NewDown>(
         self,
         action: impl FnOnce(Down) -> NewDown,
     ) -> ZipDo<NewDown, Expr, Res> {
@@ -91,7 +94,7 @@ impl<Down, Expr, Res> ZipDo<Down, Expr, Res> {
     }
 
     /// If `GoDown`, return the result of the action; else maintain the variant and inner value.
-    pub fn down_and_then<NewDown>(
+    pub fn go_down_and_then<NewDown>(
         self,
         action: impl FnOnce(Down) -> ZipDo<NewDown, Expr, Res>,
     ) -> ZipDo<NewDown, Expr, Res> {
@@ -101,6 +104,12 @@ impl<Down, Expr, Res> ZipDo<Down, Expr, Res> {
             Self::Subst(subst) => ZipDo::Subst(subst),
             Self::Early(early) => ZipDo::Early(early),
         }
+    }
+}
+impl<Expr, Res> ZipDo<internal::Empty, Expr, Res> {
+    /// Converts the `Down` type parameter from `Empty` to anything.
+    pub fn empty_convert<Down>(self) -> ZipDo<Down, Expr, Res> {
+        self.map_go_down(|empty| match empty {})
     }
 }
 

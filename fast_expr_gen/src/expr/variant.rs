@@ -45,6 +45,9 @@ impl Variant {
     pub fn contains_leaf_data(&self) -> bool {
         self.data.iter().any(expr::data::Data::is_leaf)
     }
+    pub fn is_leaf(&self) -> bool {
+        self.data.iter().all(expr::data::Data::is_leaf)
+    }
 }
 
 impl Variant {
@@ -187,11 +190,12 @@ impl Variant {
         let zip_field = &cxt.zip_ids().self_step_field();
         let go_up = &self.zipper_go_up_id;
         let data_params = self.data.iter().map(expr::data::Data::param_id);
-        cxt.lib_gen().zip_do_new_go_up(quote! {
+        let empty_convert = cxt.lib_gen().zip_do_empty_convert();
+        quote! {
             #zip_field . #go_up (
                 #( #data_params , )*
-            )
-        })
+            ) . #empty_convert ()
+        }
     }
 
     /// Builds the next frame for some data index.

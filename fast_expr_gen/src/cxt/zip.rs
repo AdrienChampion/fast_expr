@@ -115,14 +115,31 @@ impl ECxt {
     ///
     /// Used when generating a zipper trait for an expression type that mentions this expression
     /// type.
-    pub fn self_zip_trait_tokens(&self, cxt: &cxt::ZipCxt, is_own: IsOwn) -> TokenStream {
+    pub fn self_zip_trait_tokens(
+        &self,
+        cxt: &cxt::ZipCxt,
+        for_expr: idx::Expr,
+        is_own: IsOwn,
+    ) -> TokenStream {
         let variants = self.variant_handlers.to_zipper_trait_tokens(cxt, is_own);
         let colls = self.coll_handlers.to_zipper_trait_tokens(cxt, is_own);
-        let inspecter = self.inspecter.to_zipper_trait_tokens(cxt, is_own);
+        let inspecter = self.inspecter.to_zipper_trait_tokens(cxt, for_expr, is_own);
+
+        // let zip_fun_id = &self.self_ids().zip_fun;
+        // let e_typ = self.plain_typ_for(is_own);
+        // let out_typ = self.res_typ();
+        // let zip_struct = cxt[for_expr].zip_struct().id();
+        // let zip_fun_doc = doc::zip_struct::zip_fun(cxt, self.e_idx());
+
         quote! {
             #variants
             #colls
             #inspecter
+
+            // #zip_fun_doc
+            // fn #zip_fun_id(&mut self, expr: #e_typ) -> Self::#out_typ {
+            //     #zip_struct::new(self).#zip_fun_id(expr)
+            // }
         }
     }
 }
@@ -186,10 +203,14 @@ impl ECxt {
 
         let body = self.zip_fun_def_body_tokens(cxt);
 
+        let doc = doc::zip_struct::zip_fun(cxt, self.e_idx());
+
         quote! {
+            #doc
             pub fn #zip_fun_id(
                 &mut self,
-                // Input expression is mutable, because it represents the current expression. Meaning it will be changed as we go down the expression.
+                // Input expression is mutable, because it represents the current expression.
+                // Meaning it will be changed as we go down the expression.
                 #[allow(unused_mut)]
                 mut #expr: #e_typ
             ) -> #out_typ {
@@ -236,11 +257,11 @@ impl ECxt {
             // the expression variant in practice.
             let get_user_command = {
                 let inspect = &&self.self_ids().inspect_fun;
-                let down_and_then = cxt.lib_gen().zip_do_down_and_then();
+                let go_down_and_then = cxt.lib_gen().zip_do_go_down_and_then();
                 let handle_expr = &self.self_ids().handle_expr_fun;
 
                 quote! {
-                    let #zip_do = self.#step_field.#inspect(#expr).#down_and_then(
+                    let #zip_do = self.#step_field.#inspect(#expr).#go_down_and_then(
                         |expr| self.#handle_expr(expr)
                     );
                 }
@@ -252,8 +273,8 @@ impl ECxt {
             // accordingly.
             //
             // Basically, either we're given a frame and an expression, in which case we continue
-            // `go_up_label`, or we're given a result and it's time to go up. "Going up" here means we
-            // don't continue `go_up_label`, the go-up-loop is just after this.
+            // `go_up_label`, or we're given a result and it's time to go up. "Going up" here means
+            // we don't continue `go_up_label`, the go-up-loop is just after this.
             let produce_res = {
                 let new_expr = &cxt.zip_ids().new_expr_var;
                 let drain_stack = self.zip_fun_drain_stack(cxt, stack_field);

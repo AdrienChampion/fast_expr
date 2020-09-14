@@ -535,7 +535,10 @@ impl ZipTop {
             return;
         }
 
-        let (zip_doc, zip_mod) = (gen::doc::module::zip(is_own), gen::module::zip(is_own));
+        let (zip_doc, zip_mod) = (
+            doc::zip_mod::doc(&self.cxt, is_own),
+            gen::module::zip(is_own),
+        );
 
         let tokens = self
             .cxt
@@ -544,7 +547,7 @@ impl ZipTop {
             .map(|e_cxt| e_cxt.zip_mod_tokens(&self.cxt, is_own));
 
         stream.extend(quote! {
-            #[doc = #zip_doc]
+            #zip_doc
             #[macro_use]
             pub mod #zip_mod {
                 use super::*;

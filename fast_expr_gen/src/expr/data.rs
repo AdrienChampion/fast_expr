@@ -159,7 +159,7 @@ impl Data {
                     let fold = folder.to_call_tokens(cxt, res);
                     let step_field = &cxt.zip_ids().self_step_field();
                     cxt.lib_gen()
-                        .zip_do_early_return_if_not_down(quote!(#step_field.#fold))
+                        .zip_do_early_return_if_not_go_down(quote!(#step_field.#fold))
                 };
 
                 let keep_going = keep_going();
@@ -289,7 +289,7 @@ impl Data {
                         let init = initializer.to_call_tokens();
                         let step_field = &cxt.zip_ids().self_step_field();
                         cxt.lib_gen()
-                            .zip_do_early_return_if_not_down(quote! { #step_field.#init })
+                            .zip_do_early_return_if_not_go_down(quote! { #step_field.#init })
                     };
                     let iter = {
                         let iter_fun = many.iter_fun(is_own);
@@ -332,7 +332,7 @@ impl Data {
                         let fold = folder.to_call_tokens(cxt, &next_id);
                         let step_field = &cxt.zip_ids().self_step_field();
                         cxt.lib_gen()
-                            .zip_do_early_return_if_not_down(quote!(#step_field.#fold))
+                            .zip_do_early_return_if_not_go_down(quote!(#step_field.#fold))
                     };
                     let keep_going = keep_going();
                     quote!(

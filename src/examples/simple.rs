@@ -32,27 +32,43 @@ impl<'model> Eval<'model> {
     }
 }
 
-impl<'expr, 'model> zip_ref::ExprZipper<'expr> for Eval<'model> {
+impl<'expr, 'model> zip_ref::ExprZipSpec<'expr> for Eval<'model> {
     type ExprRes = Res<cst::Cst>;
     type ExprAppArgsAcc = Vec<Res<cst::Cst>>;
 
-    fn go_up_expr_var(&mut self, var: &'expr id::Id) -> Self::ExprRes {
-        self.model
-            .get(var)
-            .ok_or_else(|| format!("no value available for variable `{}`", var.id()))
+    fn go_up_expr_var(
+        &mut self,
+        var: &'expr id::Id,
+    ) -> fast_expr::ZipUp<&'expr Expr, Self::ExprRes> {
+        fast_expr::zip_do!(up:
+            self.model
+                .get(var)
+                .ok_or_else(|| format!("no value available for variable `{}`", var.id()))
+        )
     }
-    fn go_up_expr_cst(&mut self, cst: &'expr cst::Cst) -> Self::ExprRes {
-        Ok(*cst)
+    fn go_up_expr_cst(
+        &mut self,
+        cst: &'expr cst::Cst,
+    ) -> fast_expr::ZipUp<&'expr Expr, Self::ExprRes> {
+        fast_expr::zip_do!(up:
+            Ok(*cst)
+        )
     }
-    fn go_up_expr_app(&mut self, op: &'expr op::Op, args: Self::ExprAppArgsAcc) -> Self::ExprRes {
-        op.res_eval(args)
+    fn go_up_expr_app(
+        &mut self,
+        op: &'expr op::Op,
+        args: Self::ExprAppArgsAcc,
+    ) -> fast_expr::ZipUp<&'expr Expr, Self::ExprRes> {
+        fast_expr::zip_do!(up:
+            op.res_eval(args)
+        )
     }
     fn coll_init_expr_app_args(
         &mut self,
         _op: &&'expr op::Op,
         args: &&'expr Vec<Expr>,
     ) -> fast_expr::ZipDo<Self::ExprAppArgsAcc, &'expr Expr, Self::ExprRes> {
-        fast_expr::ZipDo::GoDown(Vec::with_capacity(args.len()))
+        fast_expr::zip_do!(down: Vec::with_capacity(args.len()))
     }
     fn coll_fold_expr_app_args(
         &mut self,
@@ -60,7 +76,7 @@ impl<'expr, 'model> zip_ref::ExprZipper<'expr> for Eval<'model> {
         (mut vec, next_res): (Self::ExprAppArgsAcc, Self::ExprRes),
     ) -> fast_expr::ZipDo<Self::ExprAppArgsAcc, &'expr Expr, Self::ExprRes> {
         vec.push(next_res);
-        fast_expr::ZipDo::GoDown(vec)
+        fast_expr::zip_do!(down: vec)
     }
 }
 

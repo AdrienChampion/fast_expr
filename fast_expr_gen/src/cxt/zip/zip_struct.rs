@@ -230,7 +230,10 @@ impl ZipStruct {
 
         let vis = cxt.conf().secret_item_vis();
 
+        let doc = doc::zip_struct::doc(cxt, self.e_idx);
+
         quote! {
+            #doc
             pub struct #id #params #where_clause {
                 #vis #step_field: #stepper_typ,
                 #(#vis #stacks ,)*
@@ -274,17 +277,24 @@ impl ZipStruct {
             quote!(#id: std::vec::Vec::with_capacity(#capa))
         });
         let sink_id = &self.sink_id;
+
+        let new_doc = doc::zip_struct::new_doc(cxt, self.e_idx);
+        let capa_doc = doc::zip_struct::with_capacity_doc(cxt, self.e_idx);
+
         quote! {
-            pub fn new(#step_field: #stepper_typ) -> Self {
+            #new_doc
+            pub fn new(zip_spec: #stepper_typ) -> Self {
                 Self {
-                    #step_field,
+                    #step_field: zip_spec,
                     #(#init_stacks,)*
                     #sink_id: std::marker::PhantomData,
                 }
             }
-            pub fn with_capacity(#step_field: #stepper_typ, #capa: #capa_typ) -> Self {
+
+            #capa_doc
+            pub fn with_capacity(zip_spec: #stepper_typ, #capa: #capa_typ) -> Self {
                 Self {
-                    #step_field,
+                    #step_field: zip_spec,
                     #(#init_stacks_capa,)*
                     #sink_id: std::marker::PhantomData,
                 }
