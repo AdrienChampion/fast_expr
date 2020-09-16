@@ -125,21 +125,39 @@ impl ECxt {
         let colls = self.coll_handlers.to_zipper_trait_tokens(cxt, is_own);
         let inspecter = self.inspecter.to_zipper_trait_tokens(cxt, for_expr, is_own);
 
-        // let zip_fun_id = &self.self_ids().zip_fun;
-        // let e_typ = self.plain_typ_for(is_own);
-        // let out_typ = self.res_typ();
-        // let zip_struct = cxt[for_expr].zip_struct().id();
-        // let zip_fun_doc = doc::zip_struct::zip_fun(cxt, self.e_idx());
+        let zip_fun_id = &self.self_ids().zip_fun;
+        let e_typ = self.plain_typ_for(is_own);
+        let out_typ = self.res_typ();
+        let zip_struct = cxt[for_expr].zip_struct().id();
+        let zip_fun_doc = doc::zip_struct::zip_fun(cxt, self.e_idx());
 
         quote! {
             #variants
             #colls
             #inspecter
 
-            // #zip_fun_doc
-            // fn #zip_fun_id(&mut self, expr: #e_typ) -> Self::#out_typ {
-            //     #zip_struct::new(self).#zip_fun_id(expr)
-            // }
+            #zip_fun_doc
+            fn #zip_fun_id(&mut self, expr: #e_typ) -> Self::#out_typ
+            where Self: std::marker::Sized {
+                #zip_struct::new(self).#zip_fun_id(expr)
+            }
+        }
+    }
+
+    pub fn self_auto_impl_tokens(
+        &self,
+        cxt: &cxt::ZipCxt,
+        is_own: IsOwn,
+        from: &impl ToTokens,
+    ) -> TokenStream {
+        let variants = self.variant_handlers.to_auto_impl_tokens(cxt, is_own, from);
+        let colls = self.coll_handlers.to_auto_impl_tokens(cxt, is_own, from);
+        let inspecter = self.inspecter.to_auto_impl_tokens(cxt, is_own, from);
+
+        quote! {
+            #variants
+            #colls
+            #inspecter
         }
     }
 }

@@ -2,6 +2,17 @@
 
 prelude! {}
 
+fn auto_impl_call(
+    fun_id: impl ToTokens,
+    params: impl IntoIterator<Item = impl ToTokens>,
+    from: &impl ToTokens,
+) -> TokenStream {
+    let params = params.into_iter();
+    quote! {
+        #from :: #fun_id(self #(, #params )*)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct FnParam {
     id: rust::Id,
@@ -100,6 +111,25 @@ impl Inspecter {
         }
     }
 
+    pub fn to_auto_impl_tokens(
+        &self,
+        cxt: &cxt::ZipCxt,
+        is_own: IsOwn,
+        from: &impl ToTokens,
+    ) -> TokenStream {
+        let expr_param = quote!(expr);
+        let sig = self.fun_inspect_self_sig_tokens(cxt, is_own, &expr_param, None);
+        let def = auto_impl_call(&self.id, Some(expr_param), from);
+        let assoc = &self.assoc_res_typ;
+
+        quote! {
+            type #assoc = #from :: #assoc;
+            #sig {
+                #def
+            }
+        }
+    }
+
     pub fn to_zipper_trait_tokens(
         &self,
         cxt: &cxt::ZipCxt,
@@ -142,6 +172,20 @@ impl VariantHandlers {
             #(#handlers)*
         }
     }
+
+    pub fn to_auto_impl_tokens(
+        &self,
+        cxt: &cxt::ZipCxt,
+        is_own: IsOwn,
+        from: &impl ToTokens,
+    ) -> TokenStream {
+        let handlers = self
+            .iter()
+            .map(|handler| handler.to_auto_impl_tokens(cxt, is_own, from));
+        quote! {
+            #(#handlers)*
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -172,7 +216,12 @@ impl VariantHandler {
         }
     }
 
-    pub fn to_go_up_tokens(&self, cxt: &cxt::ZipCxt, is_own: IsOwn) -> TokenStream {
+    fn internal_to_go_up_tokens(
+        &self,
+        cxt: &cxt::ZipCxt,
+        is_own: IsOwn,
+        body: Option<TokenStream>,
+    ) -> TokenStream {
         let id = &self.go_up_id;
         let e_cxt = &cxt[self.e_idx];
         let params = self
@@ -186,11 +235,35 @@ impl VariantHandler {
             cxt.lib_gen()
                 .zip_do_instantiate(quote!(#down_typ), expr_typ, quote!(Self::#res_typ))
         };
-        let go_up_doc = doc::zipper_trait::go_up_doc(cxt, self.e_idx, self.v_idx);
-        quote! {
-            #go_up_doc
-            fn #id (&mut self, #(#params,)* ) -> #go_up_res;
+        if let Some(body) = body {
+            quote! {
+                fn #id (&mut self, #(#params,)* ) -> #go_up_res { #body }
+            }
+        } else {
+            let go_up_doc = doc::zipper_trait::go_up_doc(cxt, self.e_idx, self.v_idx);
+            quote! {
+                #go_up_doc
+                fn #id (&mut self, #(#params,)* ) -> #go_up_res;
+            }
         }
+    }
+
+    pub fn to_go_up_tokens(&self, cxt: &cxt::ZipCxt, is_own: IsOwn) -> TokenStream {
+        self.internal_to_go_up_tokens(cxt, is_own, None)
+    }
+
+    pub fn to_auto_impl_tokens(
+        &self,
+        cxt: &cxt::ZipCxt,
+        is_own: IsOwn,
+        from: &impl ToTokens,
+    ) -> TokenStream {
+        let params = self.go_up_params.iter().map(|param| &param.id);
+        self.internal_to_go_up_tokens(
+            cxt,
+            is_own,
+            Some(auto_impl_call(&self.go_up_id, params, from)),
+        )
     }
 
     pub fn to_zipper_trait_tokens(&self, cxt: &cxt::ZipCxt, is_own: IsOwn) -> TokenStream {
@@ -277,7 +350,12 @@ impl CollFolder {
         &self.id
     }
 
-    pub fn to_decl_tokens(&self, cxt: &cxt::ZipCxt, is_own: IsOwn) -> TokenStream {
+    fn internal_to_tokens(
+        &self,
+        cxt: &cxt::ZipCxt,
+        is_own: IsOwn,
+        body: Option<TokenStream>,
+    ) -> TokenStream {
         let id = &self.id;
         let params = self.params.iter().map(|param| param.to_tokens(is_own));
         let zip_do = {
@@ -293,13 +371,36 @@ impl CollFolder {
 
         let doc = doc::zipper_trait::fold_doc(cxt, self.e_idx, self.c_idx);
 
-        quote! {
-            #doc
-            fn #id (
-                &mut self,
-                #( #params , )*
-            ) -> #zip_do;
+        if let Some(body) = body {
+            quote! {
+                #doc
+                fn #id (
+                    &mut self,
+                    #( #params , )*
+                ) -> #zip_do { #body }
+            }
+        } else {
+            quote! {
+                #doc
+                fn #id (
+                    &mut self,
+                    #( #params , )*
+                ) -> #zip_do;
+            }
         }
+    }
+
+    pub fn to_decl_tokens(&self, cxt: &cxt::ZipCxt, is_own: IsOwn) -> TokenStream {
+        self.internal_to_tokens(cxt, is_own, None)
+    }
+    pub fn to_auto_impl_tokens(
+        &self,
+        cxt: &cxt::ZipCxt,
+        is_own: IsOwn,
+        from: &impl ToTokens,
+    ) -> TokenStream {
+        let params = self.params.iter().map(|param| &param.id);
+        self.internal_to_tokens(cxt, is_own, Some(auto_impl_call(&self.id, params, from)))
     }
 
     pub fn to_call_tokens(&self, cxt: &cxt::ZipCxt, res: impl ToTokens) -> TokenStream {
@@ -389,7 +490,12 @@ impl CollInitializer {
         &self.id
     }
 
-    pub fn to_decl_tokens(&self, cxt: &cxt::ZipCxt, is_own: IsOwn) -> TokenStream {
+    pub fn internal_to_tokens(
+        &self,
+        cxt: &cxt::ZipCxt,
+        is_own: IsOwn,
+        body: Option<TokenStream>,
+    ) -> TokenStream {
         let id = &self.id;
         let params = self.params.iter().map(|param| param.to_tokens(is_own));
         let zip_do = {
@@ -405,13 +511,37 @@ impl CollInitializer {
 
         let doc = doc::zipper_trait::init_doc(cxt, self.e_idx, self.c_idx);
 
-        quote! {
-            #doc
-            fn #id (
-                &mut self,
-                #( #params , )*
-            ) -> #zip_do;
+        if let Some(body) = body {
+            quote! {
+                #doc
+                fn #id (
+                    &mut self,
+                    #( #params , )*
+                ) -> #zip_do { #body }
+            }
+        } else {
+            quote! {
+                #doc
+                fn #id (
+                    &mut self,
+                    #( #params , )*
+                ) -> #zip_do;
+            }
         }
+    }
+
+    pub fn to_decl_tokens(&self, cxt: &cxt::ZipCxt, is_own: IsOwn) -> TokenStream {
+        self.internal_to_tokens(cxt, is_own, None)
+    }
+
+    pub fn to_auto_impl_tokens(
+        &self,
+        cxt: &cxt::ZipCxt,
+        is_own: IsOwn,
+        from: &impl ToTokens,
+    ) -> TokenStream {
+        let params = self.params.iter().map(|param| &param.id);
+        self.internal_to_tokens(cxt, is_own, Some(auto_impl_call(&self.id, params, from)))
     }
 
     pub fn to_call_tokens(&self) -> TokenStream {
@@ -436,6 +566,19 @@ impl CollHandlers {
         let handlers = self
             .iter()
             .map(|handler| handler.to_zipper_trait_tokens(cxt, is_own));
+        quote! {
+            #(#handlers)*
+        }
+    }
+    pub fn to_auto_impl_tokens(
+        &self,
+        cxt: &cxt::ZipCxt,
+        is_own: IsOwn,
+        from: &impl ToTokens,
+    ) -> TokenStream {
+        let handlers = self
+            .iter()
+            .map(|handler| handler.to_auto_impl_tokens(cxt, is_own, from));
         quote! {
             #(#handlers)*
         }
@@ -469,6 +612,22 @@ impl CollHandler {
     }
     pub fn assoc_acc_typ(&self) -> &rust::Id {
         &self.assoc_acc_typ
+    }
+
+    pub fn to_auto_impl_tokens(
+        &self,
+        cxt: &cxt::ZipCxt,
+        is_own: IsOwn,
+        from: &impl ToTokens,
+    ) -> TokenStream {
+        let init = self.initializer.to_auto_impl_tokens(cxt, is_own, from);
+        let fold = self.folder.to_auto_impl_tokens(cxt, is_own, from);
+        let assoc = &self.assoc_acc_typ;
+        quote! {
+            type #assoc = #from :: #assoc;
+            #init
+            #fold
+        }
     }
 
     pub fn to_zipper_trait_tokens(&self, cxt: &cxt::ZipCxt, is_own: IsOwn) -> TokenStream {
@@ -537,7 +696,8 @@ impl ZipperTrait {
 impl ZipperTrait {
     pub fn to_tokens(&self, cxt: &cxt::ZipCxt, is_own: IsOwn) -> TokenStream {
         let id = &self.id;
-        let (params, _, where_clause) = self.generics(is_own).split_for_impl();
+        let generics = self.generics(is_own);
+        let (params, _, where_clause) = generics.split_for_impl();
 
         let expr_tokens = cxt[self.e_idx]
             .fp_e_deps()
@@ -547,6 +707,8 @@ impl ZipperTrait {
 
         let doc = doc::zipper_trait::doc(cxt, self.e_idx);
 
+        let ref_mut_auto_impl = self.ref_mut_auto_impl_tokens(cxt, is_own);
+
         // let macro_def = self.macro_def(cxt, is_own);
 
         quote! {
@@ -554,8 +716,67 @@ impl ZipperTrait {
             pub trait #id #params #where_clause {
                 #(#expr_tokens)*
             }
-
+            #ref_mut_auto_impl
             // #macro_def
+        }
+    }
+
+    pub fn ref_mut_auto_impl_tokens(&self, cxt: &cxt::ZipCxt, is_own: IsOwn) -> TokenStream {
+        let id = &self.id;
+        let generics = self.generics(is_own);
+        let (_, plain_params, _) = generics.split_for_impl();
+
+        let auto_impl_t = rust::Id::new("T", gen::span());
+        let auto_impl_lt = rust::Lifetime::new("'fast_expr_auto_impl_lifetime", gen::span());
+        let auto_impl_generics = {
+            let mut auto_impl_generics = rust::Generics {
+                lt_token: generics.lt_token.clone(),
+                params: syn::punctuated::Punctuated::new(),
+                gt_token: generics.gt_token.clone(),
+                where_clause: generics.where_clause.clone(),
+            };
+            auto_impl_generics
+                .params
+                .push(rust::typ::generic_param::from_lifetime(
+                    auto_impl_lt.clone(),
+                ));
+            auto_impl_generics.params.extend(
+                generics
+                    .lifetimes()
+                    .cloned()
+                    .map(rust::GenericParam::Lifetime),
+            );
+            auto_impl_generics
+                .params
+                .push(rust::GenericParam::Type(syn::parse_quote!(#auto_impl_t)));
+            auto_impl_generics.params.extend(
+                generics
+                    .type_params()
+                    .cloned()
+                    .map(rust::GenericParam::Type),
+            );
+
+            auto_impl_generics.where_clause = generics.where_clause.clone();
+            let where_clause = auto_impl_generics.make_where_clause();
+            where_clause.predicates.push(syn::parse_quote! {
+                #auto_impl_t : #id #plain_params
+            });
+
+            auto_impl_generics
+        };
+        let (auto_impl_params, _, auto_impl_where_clause) = auto_impl_generics.split_for_impl();
+
+        let expr_tokens = cxt[self.e_idx]
+            .fp_e_deps()
+            .iter()
+            .cloned()
+            .map(|dep_e_idx| cxt[dep_e_idx].self_auto_impl_tokens(cxt, is_own, &auto_impl_t));
+
+        quote! {
+            impl #auto_impl_params #id #plain_params for & #auto_impl_lt mut #auto_impl_t
+            #auto_impl_where_clause {
+                #(#expr_tokens)*
+            }
         }
     }
 

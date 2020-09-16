@@ -123,9 +123,10 @@ Inside `zip_own` we find `ExprFrame` (`enum`),  `ExprZipSpec` (`trait`), and `Ex
 - `ExprZip` is in charge of maintaining the full *state* of the zipper: the stack of frames, but
   also a value of a type implementing `ExprZipSpec`. It features a `zip_expr` function which a much
   more generic version of the substitution `go_down`/`go_up` nested loops from the previous section.
+  We will not use it here, go to [the Remarks](#about-exprzip) if you want to learn more about it.
 
 This might be confusing at this point, but everything will become clear as we discuss and use
-`ExprZipSpec` and `ExprZip`. Hopefully.
+`ExprZipSpec`. Hopefully.
 
 > Do note that `ExprFrame`, `ExprZipSpec` and `ExprZip` are tailored to the expression-type
 > definition given as input of the fast-expr macro. Fast-expr generates them for you, easing the
@@ -153,6 +154,10 @@ discussion point by point.
 ```rust,no_run,compile_fail
 pub trait ExprZipSpec<S: Spec> {
     type ExprRes;
+
+    fn zip_expr(&mut self, expr: Expr<S>) -> Self::ExprRes {
+        panic!("concrete function, body omitted here")
+    }
 
     fn go_up_expr_cst(
         &mut self, 
@@ -189,6 +194,8 @@ pub trait ExprZipSpec<S: Spec> {
 First, it has an expression specification type parameter just like our expression type. Then, we
 find the `ExprRes` associated type. This is the result type of the zipper: `Expr<S>` for a
 substitution, `()` for an iteration, *etc.*
+
+Next is *concrete* function `zip_expr` which performs the actual operation. It takes an expression as input, and returns an `ExprRes` result.
 
 > We are omitting a concrete function defined in `ExprZipSpec` as it is not needed for this example.
 > Go to [the Remarks](#inspect_-functions) at the end to learn more.
@@ -324,16 +331,7 @@ That was the easy part. Now it is time to implement `ExprTrait` to specify what 
 
 `Subst`, which implements `ExprZipSpec`, cannot zip over `Expr`essions on its own. It is merely a
 specification of how the substitution operation works that we will give to an `ExprZip` so that it
-can perform the actual substitution.
-
-This is quite easy to do, given a substitution map `map` and an expression `expr`, we just have to
-
-```rust,no_run,compile_fail
-let mut zipper = ExprZip::new(Subst::from(map));
-let new_expr = zipper.zip_expr(new_expr);
-```
-
-Better yet, let's write a method for `Expr` to make it nicer.
+can perform the actual substitution. This is quite easy to do:
 
 ```rust,no_run,compile_fail
 {{#include ../../../src/examples/book_subst_1.rs:subst_on_expr}}
@@ -344,14 +342,17 @@ Better yet, let's write a method for `Expr` to make it nicer.
 
 ## Remarks
 
-### About Having a Separate `ExprZip` Type
+### About `ExprZip`
 
-A legitimate question is *"why have `ExprZip` at all?"*. Fast-expr could just define a `zip_expr`
-function in `ExprZipSpec` that creates a stack of frames, and zips over `Expr`s right away.
+What is `ExprZip` (`struct`) anyways? Well, it's the actual zipper. `ExprZipSpec` is merely the
+specification of the operation. `ExprZip` takes an `ExprZipSpec` value and creates the stack of
+frames used during the traversal. In fact, `ExprZipSpec::zip_expr` simply creates an `ExprZip`, and
+asks it to perform the actual operation.
 
-Well, actually, `ExprZipSpec` has a `zip_expr` function that does just that. The main point of
-`ExprZip` is to avoid re-allocating and re-growing the stack(s) of frames in high performance
-contexts that work on expressions intensively.
+The reason for `ExprZip` existing is that in performance sensitive contexts, we don't want to
+re-allocate/re-grow the stack of frames every time we perform a given operation. It is more
+efficient to create an `ExprZip` and to use it repeatedly, each time preserving the stack of frames
+and its capacity.
 
 ### `ZipDo::Subst`
 

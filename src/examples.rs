@@ -6,10 +6,9 @@ macro_rules! prelude {
     };
 }
 
-pub mod test;
-
 pub mod book_subst_1;
 pub mod simple;
+pub mod test;
 
 pub mod prelude {
     pub use std::{collections::BTreeMap, convert::TryInto, fmt};

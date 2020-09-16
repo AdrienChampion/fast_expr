@@ -68,7 +68,8 @@ where
     S::Id: std::cmp::Ord,
 {
     pub fn subst(self, map: &BTreeMap<S::Id, Expr<S>>) -> Self {
-        zip_own::ExprZip::new(Subst::from(map)).zip_expr(self)
+        use zip_own::ExprZipSpec;
+        Subst::from(map).zip_expr(self)
     }
 }
 // ANCHOR_END: subst_on_expr
