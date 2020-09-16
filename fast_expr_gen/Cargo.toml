@@ -7,13 +7,13 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-either = "*"
-lazy_static = "*"
-proc-macro2 = "*"
-quote = "*"
-safe_index = "*"
-smallvec = "*"
-syn = { version = "*", features = [ "full", "extra-traits" ] }
+either = "^1.6.0"
+lazy_static = "^1.4.0"
+proc-macro2 = "^1.0.21"
+quote = "^1.0.7"
+safe_index = "^0.9.3"
+smallvec = "^1.4.2"
+syn = { version = "^1.0.41", features = [ "full", "extra-traits" ] }
 
 [features]
 dbg_log = []

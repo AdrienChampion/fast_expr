@@ -20,8 +20,8 @@ edition = "2018"
 rustdoc-args = [ "--features examples" ]
 
 [dependencies]
-fast_expr_gen = { path = "./fast_expr_gen" }
-fast_expr_proc = { path = "./fast_expr_proc" }
+fast_expr_gen = { path = "./fast_expr_gen", version = "0.1" }
+fast_expr_proc = { path = "./fast_expr_proc", version = "0.1" }
 
 [features]
 default = []

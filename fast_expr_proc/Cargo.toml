@@ -10,5 +10,5 @@ proc-macro = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-fast_expr_gen = { path = "../fast_expr_gen" }
-proc-macro2 = { version = "*" }
+fast_expr_gen = { path = "../fast_expr_gen", version = "0.1.0" }
+proc-macro2 = "^1.0.21"
