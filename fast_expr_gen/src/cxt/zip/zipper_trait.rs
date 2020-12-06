@@ -2,6 +2,12 @@
 
 prelude! {}
 
+pub mod helpers;
+mod params;
+
+pub use helpers::Helpers;
+pub use params::*;
+
 fn auto_impl_call(
     fun_id: impl ToTokens,
     params: impl IntoIterator<Item = impl ToTokens>,
@@ -13,63 +19,22 @@ fn auto_impl_call(
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct FnParam {
-    id: rust::Id,
-    own_typ: rust::Typ,
-    ref_typ: rust::Typ,
-}
-impl FnParam {
-    pub fn from_data(cxt: &cxt::FrameCxt, data: &expr::Data) -> Self {
-        let id = gen::fun::param::data_param(
-            data.d_id()
-                .map(Either::Left)
-                .unwrap_or_else(|| Either::Right(data.d_idx())),
-        );
-        let own_typ = data.zip_res(cxt, true);
-        let ref_typ = data.zip_res(cxt, false);
-        Self {
-            id,
-            own_typ,
-            ref_typ,
-        }
-    }
-
-    pub fn new(id: rust::Id, own_typ: rust::Typ, ref_typ: rust::Typ) -> Self {
-        Self {
-            id,
-            own_typ,
-            ref_typ,
-        }
-    }
-
-    pub fn id(&self) -> &rust::Id {
-        &self.id
-    }
-    pub fn typ(&self, is_own: IsOwn) -> &rust::Typ {
-        if is_own {
-            &self.own_typ
-        } else {
-            &self.ref_typ
-        }
-    }
-
-    pub fn to_tokens(&self, is_own: IsOwn) -> TokenStream {
-        let id = &self.id;
-        let typ = self.typ(is_own);
-        quote!(#id: #typ)
-    }
-}
-
+/// An inspecter for an expression type.
+///
+/// *Inspecters* run right before the zipper looks at an expression value to let users bypass the
+/// deconstruction. They have a default implementation, which instructs the zipper to keep going
+/// down.
 #[derive(Debug, Clone)]
 pub struct Inspecter {
+    /// Expression ident.
     e_idx: idx::Expr,
-
-    id: rust::Id,
-
-    assoc_res_typ: rust::Id,
+    /// Inspecter function ident.
+    id: Ident,
+    /// Result type for `e_idx`.
+    assoc_res_typ: Ident,
 }
 impl Inspecter {
+    /// Constructor.
     pub fn new(cxt: &cxt::FrameCxt, e_idx: idx::Expr) -> Self {
         let id = cxt[e_idx].self_ids().inspect_fun.clone();
         let assoc_res_typ = cxt[e_idx].res_typ_id().clone();
@@ -80,6 +45,7 @@ impl Inspecter {
         }
     }
 
+    /// Codegen for the signature of an inspector.
     pub fn fun_inspect_self_sig_tokens(
         &self,
         cxt: &cxt::ZipCxt,
@@ -99,37 +65,20 @@ impl Inspecter {
             fn #id (&mut self, #expr_param: #e_typ) -> #res_typ
         }
     }
-    pub fn fun_inspect_self_def_tokens(&self, cxt: &cxt::ZipCxt, is_own: IsOwn) -> TokenStream {
-        let expr_param = quote!(expr);
-        let sig = self.fun_inspect_self_sig_tokens(cxt, is_own, &expr_param, None);
-        let def = cxt.lib_gen().zip_do_new_go_down(expr_param);
-
-        quote! {
-            #sig {
-                #def
-            }
-        }
-    }
 
     pub fn to_auto_impl_tokens(
         &self,
-        cxt: &cxt::ZipCxt,
-        is_own: IsOwn,
+        _cxt: &cxt::ZipCxt,
+        _is_own: IsOwn,
         from: &impl ToTokens,
     ) -> TokenStream {
-        let expr_param = quote!(expr);
-        let sig = self.fun_inspect_self_sig_tokens(cxt, is_own, &expr_param, None);
-        let def = auto_impl_call(&self.id, Some(expr_param), from);
         let assoc = &self.assoc_res_typ;
-
         quote! {
             type #assoc = #from :: #assoc;
-            #sig {
-                #def
-            }
         }
     }
 
+    /// Declares its associated type and defines the inspecter.
     pub fn to_zipper_trait_tokens(
         &self,
         cxt: &cxt::ZipCxt,
@@ -160,7 +109,7 @@ impl VariantHandlers {
             .expr()
             .variants()
             .iter()
-            .map(|variant| VariantHandler::new(cxt, e_idx, variant))
+            .map(|variant| VariantHandler::new(e_idx, variant))
             .collect()
     }
 
@@ -193,18 +142,18 @@ pub struct VariantHandler {
     e_idx: idx::Expr,
     v_idx: idx::Variant,
 
-    go_up_id: rust::Id,
-    go_up_params: idx::DataMap<FnParam>,
+    go_up_id: Ident,
+    go_up_params: FnParams,
 }
 impl VariantHandler {
-    pub fn new(cxt: &cxt::FrameCxt, e_idx: idx::Expr, variant: &expr::Variant) -> Self {
+    pub fn new(e_idx: idx::Expr, variant: &expr::Variant) -> Self {
         let v_idx = variant.v_idx();
 
         let go_up_id = variant.zipper_go_up_id().clone();
         let go_up_params = variant
             .data()
             .iter()
-            .map(|data| FnParam::from_data(cxt, data))
+            .map(|data| FnParam::res_from_data(data))
             .collect();
 
         Self {
@@ -227,7 +176,7 @@ impl VariantHandler {
         let params = self
             .go_up_params
             .iter()
-            .map(|param| param.to_tokens(is_own));
+            .map(|param| param.to_tokens(cxt, is_own));
         let go_up_res = {
             let down_typ = cxt.lib_gen().empty_instantiate();
             let expr_typ = e_cxt.plain_typ_for(is_own);
@@ -258,7 +207,7 @@ impl VariantHandler {
         is_own: IsOwn,
         from: &impl ToTokens,
     ) -> TokenStream {
-        let params = self.go_up_params.iter().map(|param| &param.id);
+        let params = self.go_up_params.iter().map(|param| param.id());
         self.internal_to_go_up_tokens(
             cxt,
             is_own,
@@ -278,14 +227,14 @@ pub struct CollFolder {
     d_idx: idx::Data,
     c_idx: idx::Coll,
 
-    id: rust::Id,
+    id: Ident,
 
-    params: idx::DataMap<FnParam>,
-    assoc_acc_typ: rust::Id,
+    params: FnParams,
+    assoc_acc_typ: Ident,
 }
 
 impl CollFolder {
-    pub fn new(cxt: &cxt::FrameCxt, coll: &cxt::CollCxt, assoc_acc_typ: &rust::Id) -> Self {
+    pub fn new(cxt: &cxt::FrameCxt, coll: &cxt::CollCxt, assoc_acc_typ: &Ident) -> Self {
         let assoc_acc_typ = assoc_acc_typ.clone();
         let e_idx = coll.e_idx();
         let v_idx = coll.v_idx();
@@ -307,27 +256,21 @@ impl CollFolder {
             .map(|(p_d_idx, p_data)| {
                 let id = p_data.param_id().clone();
                 if p_d_idx < d_idx {
-                    FnParam::new(
-                        id,
-                        rust::typ::reference(None, p_data.zip_res(cxt, true)),
-                        rust::typ::reference(None, p_data.zip_res(cxt, false)),
-                    )
+                    FnParam::res_ref_from_data(Some(id), p_data)
                 } else if p_d_idx == d_idx {
-                    let inner = p_data
-                        .inner()
-                        .expect("trying to build a folder over non-recursive data");
-                    let res = cxt[inner].res_typ_id();
-                    let typ: rust::Typ = syn::parse_quote! {
-                        (Self::#assoc_acc_typ, Self::#res)
-                    };
-                    FnParam::new(id, typ.clone(), typ)
+                    if let Some(many) = p_data.as_many() {
+                        let res = cxt[many.inner()].res_typ_id();
+                        let acc_res = (
+                            syn::parse_quote! { Self::#assoc_acc_typ },
+                            syn::parse_quote! { Self::#res },
+                        );
+                        FnParam::many_iter(Some(id), p_data, acc_res)
+                    } else {
+                        panic!("trying to build collection handler for non-collection data")
+                    }
                 } else {
                     debug_assert!(p_d_idx > d_idx);
-                    FnParam::new(
-                        id,
-                        rust::typ::reference(None, p_data.frame_typ(cxt, true)),
-                        rust::typ::reference(None, p_data.frame_typ(cxt, false)),
-                    )
+                    FnParam::typ_ref_from_data(Some(id), p_data)
                 }
             })
             .collect();
@@ -346,7 +289,7 @@ impl CollFolder {
         }
     }
 
-    pub fn id(&self) -> &rust::Id {
+    pub fn id(&self) -> &Ident {
         &self.id
     }
 
@@ -357,7 +300,7 @@ impl CollFolder {
         body: Option<TokenStream>,
     ) -> TokenStream {
         let id = &self.id;
-        let params = self.params.iter().map(|param| param.to_tokens(is_own));
+        let params = self.params.iter().map(|param| param.to_tokens(cxt, is_own));
         let zip_do = {
             let acc_t_param = &self.assoc_acc_typ;
             let expr_typ = cxt[self.e_idx].plain_typ_for(is_own);
@@ -399,7 +342,7 @@ impl CollFolder {
         is_own: IsOwn,
         from: &impl ToTokens,
     ) -> TokenStream {
-        let params = self.params.iter().map(|param| &param.id);
+        let params = self.params.iter().map(|param| param.id());
         self.internal_to_tokens(cxt, is_own, Some(auto_impl_call(&self.id, params, from)))
     }
 
@@ -427,14 +370,14 @@ pub struct CollInitializer {
     d_idx: idx::Data,
     c_idx: idx::Coll,
 
-    id: rust::Id,
+    id: Ident,
 
-    params: idx::DataMap<FnParam>,
+    params: FnParams,
 
-    assoc_acc_typ: rust::Id,
+    assoc_acc_typ: Ident,
 }
 impl CollInitializer {
-    pub fn new(cxt: &cxt::FrameCxt, coll: &cxt::CollCxt, assoc_acc_typ: &rust::Id) -> Self {
+    pub fn new(cxt: &cxt::FrameCxt, coll: &cxt::CollCxt, assoc_acc_typ: &Ident) -> Self {
         let assoc_acc_typ = assoc_acc_typ.clone();
         let e_idx = coll.e_idx();
         let v_idx = coll.v_idx();
@@ -456,18 +399,10 @@ impl CollInitializer {
             .map(|(p_d_idx, p_data)| {
                 let id = p_data.param_id().clone();
                 if p_d_idx < d_idx {
-                    FnParam::new(
-                        id,
-                        rust::typ::reference(None, p_data.zip_res(cxt, true)),
-                        rust::typ::reference(None, p_data.zip_res(cxt, false)),
-                    )
+                    FnParam::res_ref_from_data(Some(id), p_data)
                 } else {
                     debug_assert!(p_d_idx >= d_idx);
-                    FnParam::new(
-                        id,
-                        rust::typ::reference(None, p_data.frame_typ(cxt, true)),
-                        rust::typ::reference(None, p_data.frame_typ(cxt, false)),
-                    )
+                    FnParam::typ_ref_from_data(Some(id), p_data)
                 }
             })
             .collect();
@@ -486,7 +421,7 @@ impl CollInitializer {
         }
     }
 
-    pub fn id(&self) -> &rust::Id {
+    pub fn id(&self) -> &Ident {
         &self.id
     }
 
@@ -497,7 +432,7 @@ impl CollInitializer {
         body: Option<TokenStream>,
     ) -> TokenStream {
         let id = &self.id;
-        let params = self.params.iter().map(|param| param.to_tokens(is_own));
+        let params = self.params.iter().map(|param| param.to_tokens(cxt, is_own));
         let zip_do = {
             let acc_t_param = &self.assoc_acc_typ;
             let expr_typ = cxt[self.e_idx].plain_typ_for(is_own);
@@ -540,7 +475,7 @@ impl CollInitializer {
         is_own: IsOwn,
         from: &impl ToTokens,
     ) -> TokenStream {
-        let params = self.params.iter().map(|param| &param.id);
+        let params = self.params.iter().map(|param| param.id());
         self.internal_to_tokens(cxt, is_own, Some(auto_impl_call(&self.id, params, from)))
     }
 
@@ -590,7 +525,7 @@ pub struct CollHandler {
     initializer: CollInitializer,
     folder: CollFolder,
 
-    assoc_acc_typ: rust::Id,
+    assoc_acc_typ: Ident,
 }
 impl CollHandler {
     pub fn new(cxt: &cxt::FrameCxt, coll: &cxt::CollCxt) -> Self {
@@ -610,7 +545,7 @@ impl CollHandler {
     pub fn folder(&self) -> &CollFolder {
         &self.folder
     }
-    pub fn assoc_acc_typ(&self) -> &rust::Id {
+    pub fn assoc_acc_typ(&self) -> &Ident {
         &self.assoc_acc_typ
     }
 
@@ -647,7 +582,7 @@ impl CollHandler {
 #[derive(Debug, Clone)]
 pub struct ZipperTrait {
     e_idx: idx::Expr,
-    id: rust::Id,
+    id: Ident,
 
     own_generics: rust::Generics,
     ref_generics: rust::Generics,
@@ -680,7 +615,7 @@ impl ZipperTrait {
         }
     }
 
-    pub fn id(&self) -> &rust::Id {
+    pub fn id(&self) -> &Ident {
         &self.id
     }
 
@@ -703,7 +638,7 @@ impl ZipperTrait {
             .fp_e_deps()
             .iter()
             .cloned()
-            .map(|dep_e_idx| cxt[dep_e_idx].self_zip_trait_tokens(cxt, self.e_idx, is_own));
+            .map(|dep_e_idx| cxt[dep_e_idx].to_self_zip_trait_tokens(cxt, self.e_idx, is_own));
 
         let doc = doc::zipper_trait::doc(cxt, self.e_idx);
 
@@ -726,7 +661,7 @@ impl ZipperTrait {
         let generics = self.generics(is_own);
         let (_, plain_params, _) = generics.split_for_impl();
 
-        let auto_impl_t = rust::Id::new("T", gen::span());
+        let auto_impl_t = Ident::new("T", gen::span());
         let auto_impl_lt = rust::Lifetime::new("'fast_expr_auto_impl_lifetime", gen::span());
         let auto_impl_generics = {
             let mut auto_impl_generics = rust::Generics {
@@ -770,7 +705,7 @@ impl ZipperTrait {
             .fp_e_deps()
             .iter()
             .cloned()
-            .map(|dep_e_idx| cxt[dep_e_idx].self_auto_impl_tokens(cxt, is_own, &auto_impl_t));
+            .map(|dep_e_idx| cxt[dep_e_idx].to_self_auto_impl_tokens(cxt, is_own, &auto_impl_t));
 
         quote! {
             impl #auto_impl_params #id #plain_params for & #auto_impl_lt mut #auto_impl_t
@@ -800,11 +735,11 @@ impl ZipperTrait {
     //                 let t_params = e_cxt.generics().params.iter().enumerate().map(
     //                     |(index, param)| match param {
     //                         rust::GenericParam::Type(_) => (
-    //                             rust::Id::new(&format!("t_param_{}", index), gen::span()),
+    //                             Ident::new(&format!("t_param_{}", index), gen::span()),
     //                             false,
     //                         ),
     //                         rust::GenericParam::Lifetime(_) => (
-    //                             rust::Id::new(&format!("t_param_{}", index), gen::span()),
+    //                             Ident::new(&format!("t_param_{}", index), gen::span()),
     //                             true,
     //                         ),
     //                         rust::GenericParam::Const(_) => {
@@ -832,7 +767,7 @@ impl ZipperTrait {
     //                 };
 
     //                 let inspect_expr_param =
-    //                     rust::Id::new(&format!("{}_expr_param", e_id), gen::span());
+    //                     Ident::new(&format!("{}_expr_param", e_id), gen::span());
     //                 let inspect_def = gen::ZipIds::inspect_fun(e_id);
     //                 let inspect_sig = e_cxt.fun_inspect_self_sig_tokens(
     //                     cxt,
@@ -848,7 +783,7 @@ impl ZipperTrait {
     //                     .map(|variant| {
     //                         let v_id = variant.v_id();
     //                         let fields = variant.data().iter().map(|data| {
-    //                             rust::Id::new(
+    //                             Ident::new(
     //                                 &format!("{}_{}_{}", e_id, v_id, data.param_id()),
     //                                 gen::span(),
     //                             )

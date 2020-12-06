@@ -82,9 +82,9 @@ pub struct EConf {
     /// Controls whether to actually generate the expression's `Zip` struct and `Zipper` trait.
     pub zip_gen: Val<bool>,
     /// Ref-impl-macro name.
-    pub ref_impl_macro_name: Val<Option<rust::Id>>,
+    pub ref_impl_macro_name: Val<Option<Ident>>,
     /// Own-impl-macro name.
-    pub own_impl_macro_name: Val<Option<rust::Id>>,
+    pub own_impl_macro_name: Val<Option<Ident>>,
 }
 
 impl EConf {
@@ -167,7 +167,7 @@ impl EConf {
         Ok(slf)
     }
 
-    pub fn impl_macro_name(&self, is_own: IsOwn) -> &Val<Option<rust::Id>> {
+    pub fn impl_macro_name(&self, is_own: IsOwn) -> &Val<Option<Ident>> {
         if is_own {
             &self.own_impl_macro_name
         } else {
@@ -210,13 +210,13 @@ impl EConf {
 #[derive(Debug, Clone)]
 pub struct Conf {
     /// Name of the `fast_expr` crate.
-    pub fast_expr_name: Val<rust::Id>,
+    pub fast_expr_name: Val<Ident>,
 
     /// Name of the single expression type to consider as top.
     ///
     /// This deactivates `zip_gen` for all expression types but this one. Note that `EConf` can
     /// override this.
-    pub top_expr: Val<Option<rust::Id>>,
+    pub top_expr: Val<Option<Ident>>,
 
     /// Forces to reveal all types and functions that would normally be secret.
     pub all_pub: Val<bool>,
@@ -227,9 +227,9 @@ pub struct Conf {
     pub own_gen: Val<bool>,
 
     /// Ref-impl-macro name.
-    pub ref_impl_macro_name: Val<Option<rust::Id>>,
+    pub ref_impl_macro_name: Val<Option<Ident>>,
     /// Own-impl-macro name.
-    pub own_impl_macro_name: Val<Option<rust::Id>>,
+    pub own_impl_macro_name: Val<Option<Ident>>,
 }
 impl Conf {
     /// Key for the `fast_expr_name` field.
@@ -276,7 +276,7 @@ impl Conf {
         // If user specified a top expression, it must exist.
         if let Some(top) = self.top_expr.as_ref() {
             let top_id = top.deref();
-            if exprs.iter().all(|expr| expr.id() != top_id) {
+            if exprs.iter().all(|expr| expr.e_id() != top_id) {
                 bail!(on(top, "unknown expression type `{}`", top_id))
             }
         }
@@ -375,7 +375,7 @@ impl Conf {
 impl Default for Conf {
     fn default() -> Self {
         Self {
-            fast_expr_name: Val::new_default(rust::Id::new("fast_expr", gen::span())),
+            fast_expr_name: Val::new_default(Ident::new("fast_expr", gen::span())),
 
             top_expr: Val::new_default(None),
 

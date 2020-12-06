@@ -12,9 +12,9 @@ pub struct ECxt {
     e_idx: idx::Expr,
 
     /// Result type identifier.
-    res_typ_id: rust::Id,
+    res_typ_id: Ident,
     /// Result type.
-    res_typ: rust::Typ,
+    res_typ: Type,
 
     /// Expression types mentioned by this expression's definition.
     ///
@@ -35,9 +35,9 @@ pub struct ECxt {
     top_t_params: rust::GenericArgs,
 
     /// Frame-type identifier.
-    frame_typ_id: rust::Id,
+    frame_typ_id: Ident,
     /// Zip trait identifier.
-    zip_trait_id: rust::Id,
+    zip_trait_id: Ident,
 
     /// Expression definition from the frontend.
     def: rust::Enum,
@@ -241,13 +241,13 @@ impl ECxt {
     }
 
     /// Plain type of the expression.
-    pub fn plain_typ(&self) -> rust::Typ {
+    pub fn plain_typ(&self) -> Type {
         let id = self.e_id();
         let (_, params, _) = self.generics().split_for_impl();
         syn::parse_quote!(#id #params)
     }
     /// Plain type under a reference if asked.
-    pub fn plain_typ_for(&self, is_own: IsOwn) -> rust::Typ {
+    pub fn plain_typ_for(&self, is_own: IsOwn) -> Type {
         let mut typ = self.plain_typ();
         if !is_own {
             typ = rust::typ::reference(Some(gen::lifetime::expr()), typ)
@@ -256,11 +256,11 @@ impl ECxt {
     }
 
     /// Identifier accessor.
-    pub fn e_id(&self) -> &rust::Id {
+    pub fn e_id(&self) -> &Ident {
         &self.def.ident
     }
     /// Id of a variant.
-    pub fn v_id(&self, v_idx: idx::Variant) -> &rust::Id {
+    pub fn v_id(&self, v_idx: idx::Variant) -> &Ident {
         &self.def.variants[*v_idx].ident
     }
 
@@ -273,19 +273,19 @@ impl ECxt {
     }
 
     /// Result type identifier.
-    pub fn res_typ_id(&self) -> &rust::Id {
+    pub fn res_typ_id(&self) -> &Ident {
         &self.res_typ_id
     }
     /// Result type.
-    pub fn res_typ(&self) -> &rust::Typ {
+    pub fn res_typ(&self) -> &Type {
         &self.res_typ
     }
     /// Frame-type identifier.
-    pub fn frame_typ_id(&self) -> &rust::Id {
+    pub fn frame_typ_id(&self) -> &Ident {
         &self.frame_typ_id
     }
     /// Zip trait identifier.
-    pub fn zip_trait_id(&self) -> &rust::Id {
+    pub fn zip_trait_id(&self) -> &Ident {
         &self.zip_trait_id
     }
 

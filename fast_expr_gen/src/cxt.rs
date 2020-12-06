@@ -99,7 +99,7 @@ impl Spec {
         Ok(Self { spec })
     }
 
-    pub fn id(&self) -> &rust::Id {
+    pub fn id(&self) -> &Ident {
         &self.spec.ident
     }
     pub fn generics(&self) -> &rust::Generics {
@@ -160,31 +160,17 @@ impl PreCxtLike for ZipCxt {
     }
 }
 
-pub trait FrameCxtLike {
+pub trait FrameCxtLike: PreCxtLike {
     fn get_frame_e_cxt(&self, e_idx: idx::Expr) -> &frame::ECxt;
-    fn lib_gen(&self) -> &gen::Lib;
-    fn conf(&self) -> &conf::Conf;
 }
 impl FrameCxtLike for FrameCxt {
     fn get_frame_e_cxt(&self, e_idx: idx::Expr) -> &frame::ECxt {
         &self[e_idx]
     }
-    fn lib_gen(&self) -> &gen::Lib {
-        &self.lib_gen
-    }
-    fn conf(&self) -> &conf::Conf {
-        &self.conf
-    }
 }
 impl FrameCxtLike for ZipCxt {
     fn get_frame_e_cxt(&self, e_idx: idx::Expr) -> &frame::ECxt {
         &self[e_idx]
-    }
-    fn lib_gen(&self) -> &gen::Lib {
-        &self.lib_gen
-    }
-    fn conf(&self) -> &conf::Conf {
-        &self.conf
     }
 }
 
@@ -200,13 +186,13 @@ pub struct Cxt<ECxt> {
     lib_gen: gen::Lib,
 
     /// Specification traits.
-    specs: Map<rust::Id, Spec>,
+    specs: Map<Ident, Spec>,
 
     /// Standard variables for the zipper structure.
     zip_ids: gen::ZipIds,
 
     /// Maps expression identifiers to their indices.
-    expr_id_map: Map<rust::Id, idx::Expr>,
+    expr_id_map: Map<Ident, idx::Expr>,
     /// Maps expression indices to their context.
     ///
     /// The normal way to access this out of this module is by indexing the context:
@@ -232,7 +218,7 @@ impl<ECxt> Cxt<ECxt> {
     }
 
     /// Retrieves the context of a expression, if any.
-    pub fn get_e_cxt(&self, id: &rust::Id) -> Option<&ECxt> {
+    pub fn get_e_cxt(&self, id: &Ident) -> Option<&ECxt> {
         self.expr_id_map.get(id).map(|idx| &self[*idx])
     }
 
@@ -245,7 +231,7 @@ impl<ECxt> Cxt<ECxt> {
     }
 
     /// Retrieves the specification of an identifier, if any.
-    pub fn get_spec(&self, id: &rust::Id) -> Option<&Spec> {
+    pub fn get_spec(&self, id: &Ident) -> Option<&Spec> {
         self.specs.get(id)
     }
 }
@@ -315,7 +301,7 @@ impl PreCxt {
         Ok(slf)
     }
 
-    pub fn specs(&self) -> &Map<rust::Id, Spec> {
+    pub fn specs(&self) -> &Map<Ident, Spec> {
         &self.specs
     }
 
@@ -340,7 +326,7 @@ impl PreCxt {
         e_idx: idx::Expr,
         v_idx: idx::Variant,
         d_idx: idx::Data,
-        d_id: Option<&rust::Id>,
+        d_id: Option<&Ident>,
         mentions: idx::Expr,
     ) -> idx::Coll {
         self.register_expr_data(e_idx, mentions);
@@ -427,22 +413,23 @@ pub struct CollCxt {
     /// Index of this collection.
     c_idx: idx::Coll,
     /// Accumulator type parameter identifier.
-    acc_t_param_id: rust::Id,
+    acc_t_param_id: Ident,
     /// Accumulator type parameter.
-    acc_t_param: rust::Typ,
+    acc_t_param: Type,
 }
 impl CollCxt {
     pub fn new(
         e_idx: idx::Expr,
-        e_id: &rust::Id,
+        e_id: &Ident,
         v_idx: idx::Variant,
-        v_id: &rust::Id,
+        v_id: &Ident,
         d_idx: idx::Data,
-        d_id: Option<&rust::Id>,
+        d_id: Option<&Ident>,
         c_idx: idx::Coll,
     ) -> Self {
         let acc_t_param_id = gen::typ::acc(
-            match d_id.map(|id| rust::SnakeId::try_from(id.clone()).and_then(|id| id.to_camel())) {
+            match d_id.map(|id| rust::SnakeIdent::try_from(id.clone()).and_then(|id| id.to_camel()))
+            {
                 Some(Ok(id)) => format!("{}{}{}", e_id, v_id, id),
                 None | Some(Err(_)) => format!("{}{}{}", e_id, v_id, d_idx),
             },
@@ -471,10 +458,10 @@ impl CollCxt {
         self.c_idx
     }
 
-    pub fn acc_t_param(&self) -> &rust::Typ {
+    pub fn acc_t_param(&self) -> &Type {
         &self.acc_t_param
     }
-    pub fn acc_t_param_id(&self) -> &rust::Id {
+    pub fn acc_t_param_id(&self) -> &Ident {
         &self.acc_t_param_id
     }
 }
@@ -544,7 +531,7 @@ impl ZipTop {
             .cxt
             .e_cxts()
             .iter()
-            .map(|e_cxt| e_cxt.zip_mod_tokens(&self.cxt, is_own));
+            .map(|e_cxt| e_cxt.to_zip_mod_tokens(&self.cxt, is_own));
 
         stream.extend(quote! {
             #zip_doc

@@ -23,16 +23,16 @@ impl CollSpec {
         }
     }
 
-    pub fn iter_on(&self, is_own: IsOwn, typ: &rust::Typ) -> rust::Typ {
+    pub fn iter_on(&self, is_own: IsOwn, typ: &Type) -> Type {
         let arg = syn::parse_quote!(Item = #typ);
         self.iter(is_own).to_typ(gen::span(), Some(vec![arg]))
     }
 
-    pub fn iter_fun(&self, is_own: IsOwn) -> rust::Id {
+    pub fn iter_fun(&self, is_own: IsOwn) -> Ident {
         if is_own {
-            rust::Id::new("into_iter", gen::span())
+            Ident::new("into_iter", gen::span())
         } else {
-            rust::Id::new("iter", gen::span())
+            Ident::new("iter", gen::span())
         }
     }
 }
@@ -81,7 +81,7 @@ pub enum Coll {
 impl Coll {
     pub const PREF: &'static str = "coll";
 
-    pub fn from_id(id: &rust::Id) -> Res<Self> {
+    pub fn from_id(id: &Ident) -> Res<Self> {
         if id == VEC.typ_id() {
             Ok(Self::Vec)
         } else if id == HASH_SET.typ_id() {
@@ -100,7 +100,7 @@ impl Coll {
             Self::BTreeSet => &BTREE_SET,
         }
     }
-    pub fn wrap(self, coll_span: rust::Span, inner: rust::Typ) -> rust::Typ {
+    pub fn wrap(self, coll_span: rust::Span, inner: Type) -> Type {
         self.spec()
             .typ()
             .to_typ(coll_span, Some(vec![rust::GenericArg::Type(inner)]))
@@ -112,7 +112,7 @@ pub struct Many {
     coll_span: rust::Span,
     coll: Coll,
     inner: super::One,
-    typ: rust::Typ,
+    typ: Type,
     c_idx: idx::Coll,
 }
 impl Many {
@@ -156,14 +156,14 @@ impl Many {
         self.c_idx
     }
 
-    pub fn acc_t_param<'a>(&self, cxt: &'a impl cxt::PreCxtLike) -> &'a rust::Typ {
+    pub fn acc_t_param<'a>(&self, cxt: &'a impl cxt::PreCxtLike) -> &'a Type {
         cxt.get_pre_e_cxt(self.e_idx()).colls()[self.c_idx].acc_t_param()
     }
 
-    pub fn iter_typ(&self, is_own: IsOwn, typ: &rust::Typ) -> rust::Typ {
+    pub fn iter_typ(&self, is_own: IsOwn, typ: &Type) -> Type {
         self.coll.spec().iter_on(is_own, typ)
     }
-    pub fn iter_fun(&self, is_own: IsOwn) -> rust::Id {
+    pub fn iter_fun(&self, is_own: IsOwn) -> Ident {
         self.coll.spec().iter_fun(is_own)
     }
 
@@ -173,7 +173,7 @@ impl Many {
 }
 
 impl Many {
-    pub fn typ(&self) -> &rust::Typ {
+    pub fn typ(&self) -> &Type {
         &self.typ
     }
 
@@ -182,7 +182,7 @@ impl Many {
         true
     }
 
-    pub fn frame_typ(&self, _cxt: &impl cxt::PreCxtLike, is_own: IsOwn) -> rust::Typ {
+    pub fn frame_typ(&self, _cxt: &impl cxt::PreCxtLike, is_own: IsOwn) -> Type {
         let typ = self.typ.clone();
         if is_own {
             typ
@@ -190,7 +190,7 @@ impl Many {
             rust::typ::to_expr_ref(typ)
         }
     }
-    pub fn frame_der(&self, cxt: &impl cxt::PreCxtLike, is_own: IsOwn) -> Option<rust::Typ> {
+    pub fn frame_der(&self, cxt: &impl cxt::PreCxtLike, is_own: IsOwn) -> Option<Type> {
         let spec = self.coll.spec();
         let acc = self.acc_t_param(cxt);
 
@@ -206,10 +206,10 @@ impl Many {
         let typ_tokens = cxt.lib_gen().coll_der_instantiate(acc, &iter);
         Some(syn::parse_quote!(#typ_tokens))
     }
-    pub fn frame_res(&self, cxt: &impl cxt::PreCxtLike, _is_own: IsOwn) -> rust::Typ {
+    pub fn frame_res(&self, cxt: &impl cxt::PreCxtLike, _is_own: IsOwn) -> Type {
         self.acc_t_param(cxt).clone()
     }
-    pub fn zip_res(&self, cxt: &impl cxt::PreCxtLike, _is_own: IsOwn) -> rust::Typ {
+    pub fn zip_res(&self, cxt: &impl cxt::PreCxtLike, _is_own: IsOwn) -> Type {
         let acc_t_param = self.acc_t_param(cxt);
         syn::parse_quote!(Self :: #acc_t_param)
     }
@@ -218,7 +218,7 @@ impl Many {
 // impl Many {
 //     pub fn extract_expr(
 //         &self,
-//         slf: &rust::Id,
+//         slf: &Ident,
 //         is_own: IsOwn,
 //         if_some: impl FnOnce(TokenStream) -> TokenStream,
 //         if_none: impl FnOnce() -> TokenStream,

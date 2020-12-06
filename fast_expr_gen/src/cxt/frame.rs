@@ -82,11 +82,11 @@ pub struct Frame {
     v_idx: idx::Variant,
     d_idx: idx::Data,
 
-    id: rust::Id,
+    id: Ident,
 
     is_struct_like: bool,
-    own_fields: Vec<rust::Id>,
-    ref_fields: Vec<rust::Id>,
+    own_fields: Vec<Ident>,
+    ref_fields: Vec<Ident>,
 
     own_def: rust::Variant,
     ref_def: rust::Variant,
@@ -291,7 +291,7 @@ impl DFrames {
 pub struct VFrames {
     e_idx: idx::Expr,
 
-    id: rust::Id,
+    id: Ident,
 
     own_generics: rust::Generics,
     ref_generics: rust::Generics,
@@ -306,7 +306,7 @@ impl VFrames {
         ref_generics: rust::Generics,
     ) -> Self {
         let e_idx = expr.e_idx();
-        let id = gen::frame::typ_id(expr.id());
+        let id = gen::frame::typ_id(expr.e_id());
         let frames = expr
             .variants()
             .iter()
@@ -324,10 +324,10 @@ impl VFrames {
         self.frames.iter().all(DFrames::is_empty)
     }
 
-    pub fn id(&self) -> &rust::Id {
+    pub fn id(&self) -> &Ident {
         &self.id
     }
-    pub fn plain_typ(&self, is_own: IsOwn) -> rust::Typ {
+    pub fn plain_typ(&self, is_own: IsOwn) -> Type {
         let id = &self.id;
         let (_, params, _) = self.generics(is_own).split_for_impl();
         syn::parse_quote!(#id #params)
@@ -348,13 +348,13 @@ impl VFrames {
             .flatten()
     }
 
-    pub fn frame_sink_arg(&self, is_own: IsOwn) -> rust::Typ {
+    pub fn frame_sink_arg(&self, is_own: IsOwn) -> Type {
         let generics = self.generics(is_own);
         let typs = generics
             .lifetimes()
             .map(|lt_def| {
                 let lt = lt_def.lifetime.clone();
-                let typ: rust::Typ = syn::parse_quote!(& #lt ());
+                let typ: Type = syn::parse_quote!(& #lt ());
                 typ
             })
             .chain(
@@ -381,7 +381,7 @@ impl VFrames {
     pub fn to_sink_match_case_tokens(&self, cxt: &cxt::ZipCxt) -> TokenStream {
         let frame_id = &self.id;
         let sink_variant = gen::frame::sink_variant_id();
-        let empty_id = rust::Id::new("empty", gen::span());
+        let empty_id = Ident::new("empty", gen::span());
         let match_empty = cxt.lib_gen().sink_match_empty(&empty_id);
         quote!(
             #frame_id :: #sink_variant ( #match_empty ) => match #empty_id {},
@@ -400,7 +400,13 @@ impl VFrames {
         let res_typ = e_cxt.res_typ_id();
         let out_typ = e_cxt.zip_variant_handler_out_typ(cxt, is_own);
 
-        let do_it = e_cxt.expr().zip_handle_frames(cxt, &res_var, is_own);
+        let do_it = {
+            let mut stream = TokenStream::new();
+            e_cxt
+                .expr()
+                .to_handle_frames_cases_tokens(&mut stream, cxt, &res_var, is_own);
+            stream
+        };
 
         let vis = cxt.conf().secret_item_vis();
 

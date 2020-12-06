@@ -26,7 +26,7 @@ pub enum Wrap {
 impl Wrap {
     pub const PREF: &'static str = "wrap";
 
-    pub fn from_id(id: &rust::Id) -> Res<Self> {
+    pub fn from_id(id: &Ident) -> Res<Self> {
         if id == BOX.id {
             Ok(Wrap::Box(id.span()))
         // } else if id == OPTION.id {
@@ -36,7 +36,7 @@ impl Wrap {
         }
     }
 
-    pub fn wrap(&self, inner: rust::Typ) -> rust::Typ {
+    pub fn wrap(&self, inner: Type) -> Type {
         match self {
             Self::Plain => inner,
             Self::Box(span) => BOX.to_typ(*span, Some(vec![rust::GenericArg::Type(inner)])),
@@ -44,7 +44,7 @@ impl Wrap {
             Self::Ref {
                 and_token,
                 lifetime,
-            } => rust::Typ::Reference(syn::TypeReference {
+            } => Type::Reference(syn::TypeReference {
                 and_token: and_token.clone(),
                 lifetime: Some(lifetime.clone()),
                 mutability: None,
@@ -69,11 +69,11 @@ pub struct One {
     v_idx: idx::Variant,
     d_idx: idx::Data,
     inner: idx::Expr,
-    id: rust::Id,
+    id: Ident,
     args: Option<rust::GenericArgs>,
-    typ: rust::Typ,
-    res_typ: rust::Typ,
-    e_typ: rust::Typ,
+    typ: Type,
+    res_typ: Type,
+    e_typ: Type,
     wrap: Wrap,
 }
 impl One {
@@ -83,7 +83,7 @@ impl One {
         e_idx: idx::Expr,
         v_idx: idx::Variant,
         d_idx: idx::Data,
-        slf: rust::Id,
+        slf: Ident,
         wrap: Wrap,
     ) -> Self {
         debug_assert_eq!(slf, "Self");
@@ -164,7 +164,7 @@ impl One {
 }
 
 impl One {
-    pub fn typ(&self) -> &rust::Typ {
+    pub fn typ(&self) -> &Type {
         &self.typ
     }
 
@@ -172,7 +172,7 @@ impl One {
     pub fn needs_frame(&self) -> bool {
         self.is_self_rec()
     }
-    pub fn frame_typ(&self, _cxt: &impl cxt::PreCxtLike, is_own: IsOwn) -> rust::Typ {
+    pub fn frame_typ(&self, _cxt: &impl cxt::PreCxtLike, is_own: IsOwn) -> Type {
         let typ = self.typ.clone();
         if is_own {
             typ
@@ -180,13 +180,13 @@ impl One {
             rust::typ::to_expr_ref(typ)
         }
     }
-    pub fn frame_der(&self, _cxt: &impl cxt::PreCxtLike, _is_own: IsOwn) -> Option<rust::Typ> {
+    pub fn frame_der(&self, _cxt: &impl cxt::PreCxtLike, _is_own: IsOwn) -> Option<Type> {
         None
     }
-    pub fn frame_res(&self, _cxt: &impl cxt::PreCxtLike, _is_own: IsOwn) -> rust::Typ {
+    pub fn frame_res(&self, _cxt: &impl cxt::PreCxtLike, _is_own: IsOwn) -> Type {
         self.res_typ.clone()
     }
-    pub fn zip_res(&self, _cxt: &impl cxt::PreCxtLike, _is_own: IsOwn) -> rust::Typ {
+    pub fn zip_res(&self, _cxt: &impl cxt::PreCxtLike, _is_own: IsOwn) -> Type {
         let res = &self.res_typ;
         syn::parse_quote!(Self :: #res)
     }
@@ -195,7 +195,7 @@ impl One {
 impl One {
     pub fn extract_expr(
         &self,
-        slf: &rust::Id,
+        slf: &Ident,
         is_own: IsOwn,
         if_some: impl FnOnce(TokenStream) -> TokenStream,
         // if_none: impl FnOnce() -> TokenStream,

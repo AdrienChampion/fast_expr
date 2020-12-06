@@ -3,12 +3,14 @@ use super::*;
 pub mod zip_struct;
 pub mod zipper_trait;
 
-use self::{
+pub use self::{
     zip_struct::ZipStruct,
-    zipper_trait::{CollHandlers, Inspecter, VariantHandlers, ZipperTrait},
+    zipper_trait::{CollHandlers, Helpers, Inspecter, VariantHandlers, ZipperTrait},
 };
 
+/// A list of context building info.
 pub type Infos = idx::ExprMap<Info>;
+/// Information needed to construct zip expression contexts.
 pub struct Info {
     zip_struct: ZipStruct,
     zipper_trait: ZipperTrait,
@@ -17,6 +19,7 @@ pub struct Info {
     inspecter: Inspecter,
 }
 impl Info {
+    /// Constructor.
     pub fn new(cxt: &cxt::FrameCxt, e_idx: idx::Expr) -> Self {
         let zip_struct = ZipStruct::new(cxt, e_idx);
         let zipper_trait = ZipperTrait::new(cxt, e_idx);
@@ -33,16 +36,26 @@ impl Info {
     }
 }
 
+/// An expression context.
 #[derive(Debug, Clone)]
 pub struct ECxt {
+    /// Underlying frame context.
     cxt: cxt::frame::ECxt,
 
+    /// Zip struct, in charge of actually doing the zipping.
     zip_struct: ZipStruct,
+    /// Zipper spec trait, implemented by users to write zippers.
     zipper_trait: ZipperTrait,
 
+    /// Variant handlers.
     variant_handlers: VariantHandlers,
+    /// Collection handlers.
     coll_handlers: CollHandlers,
+    /// Inspecter.
     inspecter: Inspecter,
+
+    /// Helpers.
+    helpers: Helpers,
 }
 implement! {
     impl ECxt {
@@ -53,6 +66,7 @@ implement! {
 }
 
 impl ECxt {
+    /// Constructor.
     pub fn new(
         cxt: cxt::frame::ECxt,
         Info {
@@ -63,6 +77,7 @@ impl ECxt {
             inspecter,
         }: Info,
     ) -> Self {
+        let helpers = Helpers::new(&cxt, &variant_handlers, &zipper_trait);
         Self {
             cxt,
             zip_struct,
@@ -71,43 +86,58 @@ impl ECxt {
             variant_handlers,
             coll_handlers,
             inspecter,
+
+            helpers,
         }
     }
 
+    /// Zip struct accessor.
     pub fn zip_struct(&self) -> &ZipStruct {
         &self.zip_struct
     }
+    /// Zipper spec accessor.
     pub fn zipper_trait(&self) -> &ZipperTrait {
         &self.zipper_trait
     }
 
+    /// Variant handlers.
     pub fn variant_handlers(&self) -> &VariantHandlers {
         &self.variant_handlers
     }
+    /// Collection handlers.
     pub fn coll_handlers(&self) -> &CollHandlers {
         &self.coll_handlers
     }
+    /// Inspecter.
     pub fn inspecter(&self) -> &Inspecter {
         &self.inspecter
+    }
+
+    /// Helper traits.
+    pub fn helpers(&self) -> &Helpers {
+        &self.helpers
     }
 }
 
 impl ECxt {
-    pub fn zip_mod_tokens(&self, cxt: &cxt::ZipCxt, is_own: IsOwn) -> TokenStream {
+    /// Codegen for a zip module.
+    pub fn to_zip_mod_tokens(&self, cxt: &cxt::ZipCxt, is_own: IsOwn) -> TokenStream {
         let mut tokens = self.frame_enum_tokens(cxt, is_own);
         if *self.e_conf().zip_gen {
-            tokens.extend(self.zip_trait_tokens(cxt, is_own));
-            tokens.extend(self.zip_struct_tokens(cxt, is_own));
+            tokens.extend(self.to_zip_trait_tokens(cxt, is_own));
+            tokens.extend(self.to_zip_struct_tokens(cxt, is_own));
+            // tokens.extend(self.helpers.to_tokens(cxt, is_own));
         }
         tokens
     }
 
-    pub fn zip_struct_tokens(&self, cxt: &cxt::ZipCxt, is_own: IsOwn) -> TokenStream {
+    /// Codegen for this expression's zip struct.
+    pub fn to_zip_struct_tokens(&self, cxt: &cxt::ZipCxt, is_own: IsOwn) -> TokenStream {
         self.zip_struct.to_tokens(cxt, is_own)
     }
 
-    /// Generates the tokens for the trait definition for this expression type.
-    pub fn zip_trait_tokens(&self, cxt: &cxt::ZipCxt, is_own: IsOwn) -> TokenStream {
+    /// Generates the tokens for the zipper spec trait.
+    pub fn to_zip_trait_tokens(&self, cxt: &cxt::ZipCxt, is_own: IsOwn) -> TokenStream {
         self.zipper_trait.to_tokens(cxt, is_own)
     }
 
@@ -115,7 +145,7 @@ impl ECxt {
     ///
     /// Used when generating a zipper trait for an expression type that mentions this expression
     /// type.
-    pub fn self_zip_trait_tokens(
+    pub fn to_self_zip_trait_tokens(
         &self,
         cxt: &cxt::ZipCxt,
         for_expr: idx::Expr,
@@ -144,7 +174,8 @@ impl ECxt {
         }
     }
 
-    pub fn self_auto_impl_tokens(
+    /// Auto implementations.
+    pub fn to_self_auto_impl_tokens(
         &self,
         cxt: &cxt::ZipCxt,
         is_own: IsOwn,
@@ -163,6 +194,7 @@ impl ECxt {
 }
 
 impl ECxt {
+    /// Output type for a handler for this expression type.
     pub fn zip_variant_handler_out_typ(&self, cxt: &cxt::ZipCxt, is_own: IsOwn) -> TokenStream {
         let expr = self.plain_typ_for(is_own);
         let res = self.res_typ_id();
@@ -176,7 +208,8 @@ impl ECxt {
         cxt.lib_gen().zip_do_instantiate(&down, &expr, &res)
     }
 
-    pub fn to_zip_handler_fn_tokens(&self, cxt: &cxt::ZipCxt, is_own: IsOwn) -> TokenStream {
+    /// Codegen for this expression type's handlers.
+    pub fn to_zip_handlers_tokens(&self, cxt: &cxt::ZipCxt, is_own: IsOwn) -> TokenStream {
         let fn_id = &self.self_ids().handle_expr_fun;
         let expr_var = &cxt.zip_ids().expr_var;
         let expr_typ = self.plain_typ_for(is_own);
@@ -211,6 +244,7 @@ impl ECxt {
 
 /// # Codegen for the actual `zip` function for this expression type
 impl ECxt {
+    /// Codegen for the zipper specific to this expression type.
     pub fn self_zip_fun_def_tokens(&self, cxt: &cxt::ZipCxt, is_own: IsOwn) -> TokenStream {
         let zip_fun_id = &self.self_ids().zip_fun;
 
@@ -241,7 +275,7 @@ impl ECxt {
     ///
     /// Makes no sense if this expression type has no frames, so it takes the name of the
     /// expression's stack as parameter.
-    fn zip_fun_drain_stack(&self, cxt: &cxt::ZipCxt, stack_field: &rust::Id) -> TokenStream {
+    fn zip_fun_drain_stack(&self, cxt: &cxt::ZipCxt, stack_field: &Ident) -> TokenStream {
         let depth = &cxt.zip_ids().depth_var;
         quote!(self.#stack_field.drain(#depth ..))
     }
@@ -408,10 +442,11 @@ impl ECxt {
         }
     }
 
+    /// Codegen for the `go_up` part of the zip function.
     fn zip_fun_def_go_up_tokens(
         &self,
         cxt: &cxt::ZipCxt,
-        stack_field: &rust::Id,
+        stack_field: &Ident,
         go_down_label: impl ToTokens,
     ) -> TokenStream {
         let go_up_label = quote!('go_up);

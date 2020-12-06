@@ -8,9 +8,9 @@ pub mod typ;
 
 pub use proc_macro2::Span;
 pub use syn::{
-    token, Attribute, Expr, Field, GenericArgument as GenericArg, GenericParam, Generics,
-    Ident as Id, ItemEnum as Enum, ItemFn as Fn, ItemTrait as Trait, Lifetime, Lit, Pat, Path,
-    Type as Typ, TypeParam as TypParam, Variant, Visibility,
+    token, Attribute, Expr, Field, GenericArgument as GenericArg, GenericParam, Generics, Ident,
+    ItemEnum as Enum, ItemFn as Fn, ItemTrait as Trait, Lifetime, Lit, Pat, Path, Type,
+    TypeParam as TypParam, Variant, Visibility,
 };
 
 /// A list of generic arguments.
@@ -28,18 +28,18 @@ pub enum TypParamDef {
     /// A lifetime identifier.
     Lifetime(Lifetime),
     /// A type identifier.
-    Typ(Id),
+    Typ(Ident),
 }
 
-pub fn try_snake_from(id: &Id) -> Id {
-    if let Ok(id) = CamelId::try_from(id.clone()).and_then(|id| id.to_snake()) {
+pub fn try_snake_from(id: &Ident) -> Ident {
+    if let Ok(id) = CamelIdent::try_from(id.clone()).and_then(|id| id.to_snake()) {
         id.id
     } else {
         id.clone()
     }
 }
-pub fn try_camel_from(id: &Id) -> Id {
-    if let Ok(id) = SnakeId::try_from(id.clone()).and_then(|id| id.to_camel()) {
+pub fn try_camel_from(id: &Ident) -> Ident {
+    if let Ok(id) = SnakeIdent::try_from(id.clone()).and_then(|id| id.to_camel()) {
         id.id
     } else {
         id.clone()
@@ -48,12 +48,12 @@ pub fn try_camel_from(id: &Id) -> Id {
 
 /// Snake-case identifiers.
 #[derive(Debug, Clone)]
-pub struct SnakeId {
-    id: Id,
+pub struct SnakeIdent {
+    id: Ident,
 }
-impl SnakeId {
+impl SnakeIdent {
     /// Constructor.
-    pub fn new(id: Id) -> Res<Self> {
+    pub fn new(id: Ident) -> Res<Self> {
         let res = Self { id };
         res.check()?;
         Ok(res)
@@ -62,7 +62,7 @@ impl SnakeId {
     /// Turns the identifier in a camel-case identifier.
     ///
     /// The span of the resulting identifier is the same as `self`.
-    pub fn to_camel(&self) -> Res<CamelId> {
+    pub fn to_camel(&self) -> Res<CamelIdent> {
         let id = self.id.to_string();
         let mut res = String::with_capacity(id.len());
         let mut make_upp = true;
@@ -78,18 +78,18 @@ impl SnakeId {
                 res.push(char)
             }
         }
-        Id::new(&res, self.id.span()).try_into()
+        Ident::new(&res, self.id.span()).try_into()
     }
 }
 
 /// Camel-case identifier.
 #[derive(Debug, Clone)]
-pub struct CamelId {
-    id: Id,
+pub struct CamelIdent {
+    id: Ident,
 }
-impl CamelId {
+impl CamelIdent {
     /// Constructor.
-    pub fn new(id: Id) -> Res<Self> {
+    pub fn new(id: Ident) -> Res<Self> {
         let res = Self { id };
         res.check()?;
         Ok(res)
@@ -98,7 +98,7 @@ impl CamelId {
     /// Turns the identifier in a snake-case identifier.
     ///
     /// The span of the resulting identifier is the same as `self`.
-    pub fn to_snake(&self) -> Res<SnakeId> {
+    pub fn to_snake(&self) -> Res<SnakeIdent> {
         let id = self.id.to_string();
         let mut res = String::with_capacity(id.len());
         let mut is_first = true;
@@ -115,7 +115,7 @@ impl CamelId {
             }
             is_first = false
         }
-        Id::new(&res, self.id.span()).try_into()
+        Ident::new(&res, self.id.span()).try_into()
     }
 }
 
@@ -124,19 +124,19 @@ implement! {
         From<Lifetime> {
             |lt| Self::Lifetime(lt)
         }
-        From<Id> {
+        From<Ident> {
             |id| Self::Typ(id)
         }
     }
 
-    impl SnakeId {
-        TryFrom<Id, err::Error> {
+    impl SnakeIdent {
+        TryFrom<Ident, err::Error> {
             |id| Self::new(id)
         }
-        TryFrom<CamelId, err::Error> {
+        TryFrom<CamelIdent, err::Error> {
             |camel| camel.to_snake()
         }
-        Deref<Id> {
+        Deref<Ident> {
             |self| &self.id
         }
         Display {
@@ -144,14 +144,14 @@ implement! {
         }
     }
 
-    impl CamelId {
-        TryFrom<Id, err::Error> {
+    impl CamelIdent {
+        TryFrom<Ident, err::Error> {
             |id| Self::new(id)
         }
-        TryFrom<SnakeId, err::Error> {
+        TryFrom<SnakeIdent, err::Error> {
             |snake| snake.to_camel()
         }
-        Deref<Id> {
+        Deref<Ident> {
             |self| &self.id
         }
         Display {
@@ -160,7 +160,7 @@ implement! {
     }
 }
 
-impl SnakeId {
+impl SnakeIdent {
     /// Checks that the identifier is indeed a snake-case identifier.
     pub fn check(&self) -> Res<()> {
         let id = self.id.to_string();
@@ -198,7 +198,7 @@ impl SnakeId {
     }
 }
 
-impl CamelId {
+impl CamelIdent {
     /// Checks that the identifier is indeed a camel-case identifier.
     pub fn check(&self) -> Res<()> {
         let id = self.id.to_string();

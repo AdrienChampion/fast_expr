@@ -2,64 +2,69 @@
 
 prelude! {}
 
-use rust::Id;
-
 pub fn span() -> rust::Span {
     rust::Span::mixed_site()
 }
 
 const FAST_EXPR_CRATE: &str = "fast_expr";
 
-pub fn lib_path() -> Id {
-    Id::new(FAST_EXPR_CRATE, gen::span())
+pub fn lib_path() -> Ident {
+    Ident::new(FAST_EXPR_CRATE, gen::span())
 }
 
 pub mod fun {
     use super::*;
 
     pub const GO_UP_PREF: &str = "go_up";
-
-    pub fn go_up(e_id: &rust::Id, v_id: &rust::Id) -> rust::Id {
+    pub fn go_up(e_id: &Ident, v_id: &Ident) -> Ident {
         let e_id = rust::try_snake_from(e_id);
         let v_id = rust::try_snake_from(v_id);
         let id = format!("{}_{}_{}", GO_UP_PREF, e_id, v_id);
-        Id::new(&id, span())
+        Ident::new(&id, span())
     }
-    pub fn variant_handler(e_id: &rust::Id, v_id: &rust::Id) -> rust::Id {
+
+    const EVAL_SC_PREF: &str = "eval_sc";
+    pub fn eval_sc(e_id: &Ident, v_id: &Ident) -> Ident {
+        let e_id = rust::try_snake_from(e_id);
+        let v_id = rust::try_snake_from(v_id);
+        let id = format!("{}_{}_{}", EVAL_SC_PREF, e_id, v_id);
+        Ident::new(&id, span())
+    }
+    pub fn variant_handler(e_id: &Ident, v_id: &Ident) -> Ident {
         let e_id = rust::try_snake_from(e_id);
         let v_id = rust::try_snake_from(v_id);
         let id = format!("handle_variant_{}_{}", e_id, v_id);
-        Id::new(&id, span())
+        Ident::new(&id, span())
     }
 
-    pub fn initializer(e_id: &rust::Id, v_id: &rust::Id, d_id: &rust::Id) -> rust::Id {
+    pub fn initializer(e_id: &Ident, v_id: &Ident, d_id: &Ident) -> Ident {
         let e_id = rust::try_snake_from(e_id);
         let v_id = rust::try_snake_from(v_id);
         let id = format!("coll_init_{}_{}_{}", e_id, v_id, d_id);
-        Id::new(&id, span())
+        Ident::new(&id, span())
     }
-    pub fn folder(e_id: &rust::Id, v_id: &rust::Id, d_id: &rust::Id) -> rust::Id {
+    pub fn folder(e_id: &Ident, v_id: &Ident, d_id: &Ident) -> Ident {
         let e_id = rust::try_snake_from(e_id);
         let v_id = rust::try_snake_from(v_id);
         let id = format!("coll_fold_{}_{}_{}", e_id, v_id, d_id);
-        Id::new(&id, span())
+        Ident::new(&id, span())
     }
 
     pub mod param {
         use super::*;
 
-        pub fn data_param(id: Either<&rust::Id, impl Display>) -> rust::Id {
+        pub fn data_param(id: Either<&Ident, impl Display>) -> Ident {
             let id = match id.map_left(|id| {
                 (
                     id,
-                    rust::CamelId::try_from(id.clone()).and_then(|id| id.to_snake()),
+                    rust::CamelIdent::try_from(id.clone()).and_then(|id| id.to_snake()),
                 )
             }) {
                 Either::Left((_, Ok(id))) => id.to_string(),
                 Either::Left((id, Err(_))) => id.to_string(),
                 Either::Right(idx) => format!("elem_{}", idx),
             };
-            Id::new(&id, span())
+            Ident::new(&id, span())
         }
     }
 }
@@ -69,25 +74,21 @@ pub mod frame {
 
     const SUFF: &str = "Frame";
 
-    pub fn typ_id(id: impl Display) -> rust::Id {
-        Id::new(&format!("{}{}", id, SUFF), span())
+    pub fn typ_id(id: impl Display) -> Ident {
+        Ident::new(&format!("{}{}", id, SUFF), span())
     }
-    pub fn variant_id(
-        e_variant: &rust::Id,
-        d_idx: idx::Data,
-        field: Option<&rust::Id>,
-    ) -> rust::Id {
+    pub fn variant_id(e_variant: &Ident, d_idx: idx::Data, field: Option<&Ident>) -> Ident {
         let id = match field
-            .map(|id| rust::SnakeId::try_from(id.clone()).and_then(|id| id.to_camel()))
+            .map(|id| rust::SnakeIdent::try_from(id.clone()).and_then(|id| id.to_camel()))
         {
             Some(Ok(id)) => format!("{}{}", e_variant, id),
             None | Some(Err(_)) => format!("{}{}", e_variant, d_idx),
         };
-        Id::new(&id, span())
+        Ident::new(&id, span())
     }
 
-    pub fn sink_variant_id() -> rust::Id {
-        Id::new("Sink", span())
+    pub fn sink_variant_id() -> Ident {
+        Ident::new("Sink", span())
     }
 }
 
@@ -97,7 +98,7 @@ pub mod lifetime {
     pub fn expr() -> rust::Lifetime {
         rust::Lifetime {
             apostrophe: span(),
-            ident: Id::new("fast_expr", span()),
+            ident: Ident::new("fast_expr", span()),
         }
     }
 }
@@ -108,25 +109,29 @@ pub mod typ {
     pub const RES_SUFF: &str = "Res";
     pub const ACC_SUFF: &str = "Acc";
     pub const ZIP_SUFF: &str = "Zip";
+    pub const EVAL_SC_SUFF: &str = "EvalSc";
 
-    pub fn res(id: impl Display) -> Id {
-        Id::new(&format!("{}{}", id, RES_SUFF), span())
+    pub fn res(id: impl Display) -> Ident {
+        Ident::new(&format!("{}{}", id, RES_SUFF), span())
     }
-    pub fn acc(id: impl Display) -> Id {
-        Id::new(&format!("{}{}", id, ACC_SUFF), span())
+    pub fn eval_sc(id: impl Display) -> Ident {
+        Ident::new(&format!("{}{}", id, EVAL_SC_SUFF), span())
     }
-    pub fn zip(id: impl Display) -> Id {
-        Id::new(&format!("{}{}", id, ZIP_SUFF), span())
+    pub fn acc(id: impl Display) -> Ident {
+        Ident::new(&format!("{}{}", id, ACC_SUFF), span())
+    }
+    pub fn zip(id: impl Display) -> Ident {
+        Ident::new(&format!("{}{}", id, ZIP_SUFF), span())
     }
 
     pub mod param {
         use super::*;
 
-        pub fn step() -> Id {
-            Id::new("ZipSpec", span())
+        pub fn step() -> Ident {
+            Ident::new("ZipSpec", span())
         }
-        pub fn zip() -> Id {
-            Id::new("Zip", span())
+        pub fn zip() -> Ident {
+            Ident::new("Zip", span())
         }
     }
 }
@@ -136,24 +141,24 @@ pub mod trai {
 
     pub const ZIPPER_SUFF: &str = "ZipSpec";
 
-    pub fn stepper(id: impl Display) -> Id {
-        Id::new(&format!("{}{}", id, "Stepper"), span())
+    pub fn stepper(id: impl Display) -> Ident {
+        Ident::new(&format!("{}{}", id, "Stepper"), span())
     }
-    pub fn zipper(id: impl Display) -> Id {
-        Id::new(&format!("{}{}", id, ZIPPER_SUFF), span())
+    pub fn zipper(id: impl Display) -> Ident {
+        Ident::new(&format!("{}{}", id, ZIPPER_SUFF), span())
     }
 
     pub mod lib {
         use super::*;
 
-        pub fn stepper() -> Id {
-            Id::new("Stepper", span())
+        pub fn stepper() -> Ident {
+            Ident::new("Stepper", span())
         }
-        pub fn zipper() -> Id {
-            Id::new("Zipper", span())
+        pub fn zipper() -> Ident {
+            Ident::new("Zipper", span())
         }
-        pub fn zipper_res_typ() -> Id {
-            Id::new("Res", span())
+        pub fn zipper_res_typ() -> Ident {
+            Ident::new("Res", span())
         }
     }
 }
@@ -161,11 +166,11 @@ pub mod trai {
 pub mod macr {
     use super::*;
 
-    pub fn zipper_impl(e_id: &Id, is_own: IsOwn) -> Id {
+    pub fn zipper_impl(e_id: &Ident, is_own: IsOwn) -> Ident {
         let e_id = rust::try_snake_from(e_id);
-        let suff = rust::try_snake_from(&Id::new(trai::ZIPPER_SUFF, span()));
+        let suff = rust::try_snake_from(&Ident::new(trai::ZIPPER_SUFF, span()));
         let own = if is_own { "own" } else { "ref" };
-        Id::new(&format!("impl_{}_{}_{}", e_id, suff, own), span())
+        Ident::new(&format!("impl_{}_{}_{}", e_id, suff, own), span())
     }
 }
 
@@ -175,18 +180,18 @@ pub mod field {
     pub mod expr_zip {
         use super::*;
 
-        pub fn stepper() -> Id {
-            Id::new("step", span())
+        pub fn stepper() -> Ident {
+            Ident::new("step", span())
         }
-        pub fn stack(id: Id) -> Id {
-            let id = match rust::CamelId::try_from(id.clone()).and_then(|id| id.to_snake()) {
+        pub fn stack(id: Ident) -> Ident {
+            let id = match rust::CamelIdent::try_from(id.clone()).and_then(|id| id.to_snake()) {
                 Ok(id) => format!("{}_stack", id),
                 Err(_) => format!("{}_stack", id),
             };
-            Id::new(&id, span())
+            Ident::new(&id, span())
         }
-        pub fn sink() -> Id {
-            Id::new("_sink", span())
+        pub fn sink() -> Ident {
+            Ident::new("_sink", span())
         }
     }
 }
@@ -194,13 +199,13 @@ pub mod field {
 pub mod module {
     use super::*;
 
-    pub fn zip_ref() -> Id {
-        Id::new("zip_ref", span())
+    pub fn zip_ref() -> Ident {
+        Ident::new("zip_ref", span())
     }
-    pub fn zip_own() -> Id {
-        Id::new("zip_own", span())
+    pub fn zip_own() -> Ident {
+        Ident::new("zip_own", span())
     }
-    pub fn zip(is_own: IsOwn) -> Id {
+    pub fn zip(is_own: IsOwn) -> Ident {
         if is_own {
             zip_own()
         } else {
@@ -236,21 +241,21 @@ pub mod punct {
 
 #[derive(Debug, Clone)]
 pub struct Lib {
-    path: rust::Id,
-    internal_path: rust::Id,
+    path: Ident,
+    internal_path: Ident,
 }
 impl Lib {
     pub fn new(conf: &conf::Conf) -> Self {
         let path = conf.fast_expr_name.deref().clone();
-        let internal_path = Id::new("internal", span());
+        let internal_path = Ident::new("internal", span());
         Self {
             path,
             internal_path,
         }
     }
 
-    fn sink_id() -> Id {
-        Id::new("Sink", span())
+    fn sink_id() -> Ident {
+        Ident::new("Sink", span())
     }
     pub fn sink_instantiate(&self, tt: impl ToTokens) -> TokenStream {
         let path = &self.path;
@@ -258,12 +263,12 @@ impl Lib {
         let sink = Self::sink_id();
         quote! { #path :: #internal :: #sink < #tt > }
     }
-    pub fn sink_match_empty(&self, id: &rust::Id) -> TokenStream {
+    pub fn sink_match_empty(&self, id: &Ident) -> TokenStream {
         quote! { (_, #id) }
     }
 
-    fn empty_id() -> Id {
-        Id::new("Empty", span())
+    fn empty_id() -> Ident {
+        Ident::new("Empty", span())
     }
     pub fn empty_instantiate(&self) -> TokenStream {
         let path = &self.path;
@@ -272,8 +277,8 @@ impl Lib {
         quote! { #path :: #internal :: #empty }
     }
 
-    fn coll_der_id() -> Id {
-        Id::new("CollDer", span())
+    fn coll_der_id() -> Ident {
+        Ident::new("CollDer", span())
     }
     pub fn coll_der_instantiate(&self, acc: impl ToTokens, iter: impl ToTokens) -> TokenStream {
         let path = &self.path;
@@ -282,11 +287,11 @@ impl Lib {
             #path :: #coll_der < #acc, #iter >
         }
     }
-    pub fn coll_der_acc_field(&self) -> Id {
-        Id::new("acc", span())
+    pub fn coll_der_acc_field(&self) -> Ident {
+        Ident::new("acc", span())
     }
-    pub fn coll_der_iter_field(&self) -> Id {
-        Id::new("iter", span())
+    pub fn coll_der_iter_field(&self) -> Ident {
+        Ident::new("iter", span())
     }
     pub fn coll_der_new(&self, acc: impl ToTokens, iter: impl ToTokens) -> TokenStream {
         let path = &self.path;
@@ -296,20 +301,20 @@ impl Lib {
         }
     }
 
-    fn zip_do_id() -> Id {
-        Id::new("ZipDo", span())
+    fn zip_do_id() -> Ident {
+        Ident::new("ZipDo", span())
     }
-    fn zip_do_go_down_id() -> Id {
-        Id::new("GoDown", span())
+    fn zip_do_go_down_id() -> Ident {
+        Ident::new("GoDown", span())
     }
-    fn zip_do_go_up_id() -> Id {
-        Id::new("GoUp", span())
+    fn zip_do_go_up_id() -> Ident {
+        Ident::new("GoUp", span())
     }
-    fn zip_do_subst_id() -> Id {
-        Id::new("Subst", span())
+    fn zip_do_subst_id() -> Ident {
+        Ident::new("Subst", span())
     }
-    fn zip_do_early_id() -> Id {
-        Id::new("Early", span())
+    fn zip_do_early_id() -> Ident {
+        Ident::new("Early", span())
     }
     pub fn zip_do_instantiate(
         &self,
@@ -351,17 +356,17 @@ impl Lib {
         }
     }
 
-    pub fn zip_do_map_go_down(&self) -> Id {
-        Id::new("map_go_down", span())
+    pub fn zip_do_map_go_down(&self) -> Ident {
+        Ident::new("map_go_down", span())
     }
-    pub fn zip_do_go_down_and_then(&self) -> Id {
-        Id::new("go_down_and_then", span())
+    pub fn zip_do_go_down_and_then(&self) -> Ident {
+        Ident::new("go_down_and_then", span())
     }
-    pub fn zip_do_empty_convert(&self) -> Id {
-        Id::new("empty_convert", span())
+    pub fn zip_do_empty_convert(&self) -> Ident {
+        Ident::new("empty_convert", span())
     }
 
-    fn zip_do_new(&self, variant: Id, inner: impl ToTokens) -> TokenStream {
+    fn zip_do_new(&self, variant: Ident, inner: impl ToTokens) -> TokenStream {
         let lib_path = &self.path;
         let zip_do = Self::zip_do_id();
         quote! {
@@ -402,16 +407,16 @@ impl Lib {
 
 #[derive(Debug, Clone)]
 pub struct ZipBoundIds {
-    pub zip_fun: rust::Id,
-    pub inspect_fun: rust::Id,
-    pub handle_frame_fun: rust::Id,
-    pub handle_expr_fun: rust::Id,
+    pub zip_fun: Ident,
+    pub inspect_fun: Ident,
+    pub handle_frame_fun: Ident,
+    pub handle_expr_fun: Ident,
 
-    pub stack_field: Option<rust::Id>,
+    pub stack_field: Option<Ident>,
 }
 impl ZipBoundIds {
     pub fn new(expr: &expr::Expr) -> Self {
-        let e_id = expr.id();
+        let e_id = expr.e_id();
 
         let zip_fun = Self::gen(format!("zip_{}", rust::try_snake_from(e_id)));
         let inspect_fun = Self::gen(format!("inspect_{}", rust::try_snake_from(e_id)));
@@ -434,29 +439,29 @@ impl ZipBoundIds {
         }
     }
 
-    fn gen(s: impl AsRef<str>) -> rust::Id {
-        Id::new(s.as_ref(), span())
+    fn gen(s: impl AsRef<str>) -> Ident {
+        Ident::new(s.as_ref(), span())
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct ZipIds {
-    pub expr_var: rust::Id,
-    pub new_expr_var: rust::Id,
-    pub res_var: rust::Id,
-    pub new_res_var: rust::Id,
-    pub frame_var: rust::Id,
-    pub depth_var: rust::Id,
-    pub zip_do_var: rust::Id,
+    pub expr_var: Ident,
+    pub new_expr_var: Ident,
+    pub res_var: Ident,
+    pub new_res_var: Ident,
+    pub frame_var: Ident,
+    pub depth_var: Ident,
+    pub zip_do_var: Ident,
 
-    pub step_field: rust::Id,
+    pub step_field: Ident,
 }
 impl ZipIds {
-    fn gen_reserved(name: impl Display) -> rust::Id {
-        Id::new(&format!("{}_reserved_for_fast_expr", name), span())
+    fn gen_reserved(name: impl Display) -> Ident {
+        Ident::new(&format!("{}_reserved_for_fast_expr", name), span())
     }
-    fn gen(s: impl AsRef<str>) -> rust::Id {
-        Id::new(s.as_ref(), span())
+    fn gen(s: impl AsRef<str>) -> Ident {
+        Ident::new(s.as_ref(), span())
     }
 
     pub fn self_step_field(&self) -> TokenStream {
@@ -464,20 +469,20 @@ impl ZipIds {
         quote!(self.#step_field)
     }
 
-    pub fn zip_fun(e_id: &rust::Id) -> rust::Id {
+    pub fn zip_fun(e_id: &Ident) -> Ident {
         Self::gen(format!("zip_{}", rust::try_snake_from(e_id)))
     }
-    pub fn inspect_fun(e_id: &rust::Id) -> rust::Id {
+    pub fn inspect_fun(e_id: &Ident) -> Ident {
         Self::gen(format!("inspect_{}", rust::try_snake_from(e_id)))
     }
-    pub fn handle_frame_fun(e_id: &rust::Id) -> rust::Id {
+    pub fn handle_frame_fun(e_id: &Ident) -> Ident {
         Self::gen(format!("handle_frame_{}", rust::try_snake_from(e_id)))
     }
-    pub fn handle_expr_fun(e_id: &rust::Id) -> rust::Id {
+    pub fn handle_expr_fun(e_id: &Ident) -> Ident {
         Self::gen(format!("handle_{}", rust::try_snake_from(e_id)))
     }
 
-    pub fn stack_field(e_id: &rust::Id) -> rust::Id {
+    pub fn stack_field(e_id: &Ident) -> Ident {
         Self::gen(format!("stack_{}", rust::try_snake_from(e_id)))
     }
 }

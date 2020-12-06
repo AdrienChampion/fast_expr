@@ -83,7 +83,7 @@ impl Parse for Top {
 
 pub enum LitOrId {
     Lit(rust::Lit),
-    Id(rust::Id),
+    Id(Ident),
 }
 impl LitOrId {
     pub fn span(&self) -> rust::Span {
@@ -97,7 +97,7 @@ impl Parse for LitOrId {
     fn parse(input: ParseStream) -> Res<Self> {
         let lookahead = input.lookahead1();
 
-        if lookahead.peek(rust::Id) {
+        if lookahead.peek(Ident) {
             let id = input.parse()?;
             Ok(Self::Id(id))
         } else if lookahead.peek(rust::Lit) {
@@ -128,7 +128,7 @@ impl Parse for Conf {
 }
 
 pub struct ConfField {
-    pub id: rust::Id,
+    pub id: Ident,
     pub val: Option<(rust::token::Eq, LitOrId)>,
 }
 impl ConfField {
@@ -141,7 +141,7 @@ impl ConfField {
         Ok((self.id.span(), val))
     }
 
-    pub fn into_id(self) -> Res<(rust::Span, rust::Id)> {
+    pub fn into_id(self) -> Res<(rust::Span, Ident)> {
         match self.val {
             None => bail!(on(self.id, "expected identifier")),
             Some((_, LitOrId::Id(id))) => Ok((id.span(), id)),

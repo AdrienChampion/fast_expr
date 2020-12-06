@@ -10,21 +10,28 @@ pub use leaf::Leaf;
 pub use many::Many;
 pub use one::One;
 
-/// Some variant data.
+/// Some variant data, belongs to a variant.
 #[derive(Debug, Clone)]
 pub struct Data {
+    /// Expression index.
     e_idx: idx::Expr,
+    /// Variant index.
     v_idx: idx::Variant,
+    /// Data index.
     d_idx: idx::Data,
 
-    data: DataTyp,
+    /// Standard identifier for this data.
+    param_id: Ident,
 
+    /// Data kind.
+    data: DataType,
+
+    /// Frontend representation.
     src: rust::Field,
-
-    param_id: rust::Id,
 }
 
 impl Data {
+    /// Constructor from a frontend representation.
     pub fn from_front(
         cxt: &mut cxt::PreCxt,
         e_idx: idx::Expr,
@@ -35,7 +42,7 @@ impl Data {
         let src = field.clone();
         let typ = &field.ty;
 
-        let data_typ: DataTyp = self::front::resolve_typ(cxt, typ)?.into_data_typ(
+        let data_typ: DataType = self::front::resolve_typ(cxt, typ)?.into_data_typ(
             cxt,
             e_idx,
             v_idx,
@@ -63,56 +70,66 @@ impl Data {
         })
     }
 
-    pub fn d_id(&self) -> Option<&rust::Id> {
+    /// Data identifier, if any.
+    pub fn d_id(&self) -> Option<&Ident> {
         self.src.ident.as_ref()
     }
 
+    /// True if the data mentions is own expression type.
     pub fn is_self_rec(&self) -> bool {
         self.data.is_self_rec()
     }
 
+    /// Expression index.
     pub fn e_idx(&self) -> idx::Expr {
         self.e_idx
     }
+    /// Variant index.
     pub fn v_idx(&self) -> idx::Variant {
         self.v_idx
     }
+    /// Data index.
     pub fn d_idx(&self) -> idx::Data {
         self.d_idx
     }
 
-    pub fn data(&self) -> &DataTyp {
+    /// Underlying data.
+    pub fn data(&self) -> &DataType {
         &self.data
     }
 
-    pub fn typ(&self) -> &rust::Typ {
+    /// Type of the data.
+    pub fn typ(&self) -> &Type {
         self.data.typ()
     }
 
-    pub fn is_leaf(&self) -> bool {
-        self.data.is_leaf()
-    }
-
-    pub fn param_id(&self) -> &rust::Id {
+    /// Standard identifier.
+    pub fn param_id(&self) -> &Ident {
         &self.param_id
     }
 
+    /// Map over the recursive expressions.
     pub fn map_rec_exprs(&self, action: impl FnMut(idx::Expr, IsColl) -> Res<()>) -> Res<()> {
         self.data.map_rec_exprs(action)
     }
 
+    /// If of the [`Many`] kind, returns the many-info.
+    ///
+    /// [`Many`]: crate::expr::data::Many (Many struct)
     pub fn as_many(&self) -> Option<&Many> {
         match &self.data {
-            DataTyp::Many(many) => Some(many),
-            DataTyp::Leaf(_) | DataTyp::One(_) => None,
+            DataType::Many(many) => Some(many),
+            DataType::Leaf(_) | DataType::One(_) => None,
         }
     }
+    /// Returns the expression type index stored in this data, if any.
     pub fn inner(&self) -> Option<idx::Expr> {
         self.data.inner()
     }
 }
 
 impl Data {
+    /// Tokens for the actual expression type enum definition.
     pub fn to_expr_data_tokens(&self, stream: &mut TokenStream) {
         stream.append_all(&self.src.attrs);
         self.src.vis.to_tokens(stream);
@@ -130,10 +147,11 @@ impl Data {
         self.data.to_expr_data_tokens(stream);
     }
 
+    /// Codegen for handling a frame for this data.
     pub fn zip_handle_frame(
         &self,
         cxt: &cxt::ZipCxt,
-        res: &rust::Id,
+        res: &Ident,
         is_own: IsOwn,
         frame_expr_pair_do: impl FnOnce(TokenStream) -> TokenStream,
         keep_going: impl FnOnce() -> TokenStream,
@@ -141,7 +159,7 @@ impl Data {
         let id = self.param_id();
 
         match self.data() {
-            DataTyp::One(one) if one.is_self_rec() => {
+            DataType::One(one) if one.is_self_rec() => {
                 let keep_going = keep_going();
                 quote! {
                     let #id = #res;
@@ -149,8 +167,8 @@ impl Data {
                 }
             }
 
-            DataTyp::Many(many) if many.is_self_rec() => {
-                let next_id = rust::Id::new("fast_expr_reserved_next", gen::span());
+            DataType::Many(many) if many.is_self_rec() => {
+                let next_id = Ident::new("fast_expr_reserved_next", gen::span());
                 let acc_field = cxt.lib_gen().coll_der_acc_field();
                 let iter_field = cxt.lib_gen().coll_der_iter_field();
 
@@ -201,7 +219,7 @@ impl Data {
                 }
             }
 
-            DataTyp::Leaf(_) | DataTyp::One(_) | DataTyp::Many(_) => {
+            DataType::Leaf(_) | DataType::One(_) | DataType::Many(_) => {
                 // panic!(
                 //     "trying to update frame result for some non-self-rec data \
                 //                 {}::{}::{}",
@@ -240,9 +258,9 @@ impl Data {
     ) -> TokenStream {
         let id = self.param_id();
         match self.data() {
-            DataTyp::Leaf(_) => keep_going(),
+            DataType::Leaf(_) => keep_going(),
 
-            DataTyp::One(one) if one.is_self_rec() => one.extract_expr(
+            DataType::One(one) if one.is_self_rec() => one.extract_expr(
                 id,
                 is_own,
                 |inner| {
@@ -258,7 +276,7 @@ impl Data {
                 // keep_going,
             ),
 
-            DataTyp::One(one) => {
+            DataType::One(one) => {
                 debug_assert!(!one.is_self_rec());
 
                 let zip_fun = &cxt[one.inner()].self_ids().zip_fun;
@@ -281,7 +299,7 @@ impl Data {
                 }
             }
 
-            DataTyp::Many(many) => {
+            DataType::Many(many) => {
                 let init = if with_init {
                     let initializer =
                         &cxt[many.e_idx()].coll_handlers()[many.c_idx()].initializer();
@@ -301,7 +319,7 @@ impl Data {
                     quote!()
                 };
 
-                let next_id = rust::Id::new("fast_expr_reserved_next", gen::span());
+                let next_id = Ident::new("fast_expr_reserved_next", gen::span());
                 let acc_field = cxt.lib_gen().coll_der_acc_field();
                 let iter_field = cxt.lib_gen().coll_der_iter_field();
 
@@ -351,12 +369,12 @@ impl Data {
 }
 
 #[derive(Debug, Clone)]
-pub enum DataTyp {
+pub enum DataType {
     Leaf(Leaf),
     One(One),
     Many(Many),
 }
-impl DataTyp {
+impl DataType {
     pub fn map_rec_exprs(&self, mut action: impl FnMut(idx::Expr, IsColl) -> Res<()>) -> Res<()> {
         match self {
             Self::Leaf(leaf) => leaf.map_rec_exprs(|idx| action(idx, false)),
@@ -365,16 +383,31 @@ impl DataTyp {
         }
     }
 
+    /// True if the data is leaf-like.
     pub fn is_leaf(&self) -> bool {
         match self {
             Self::Leaf(_) => true,
             Self::One(_) | Self::Many(_) => false,
         }
     }
+    /// True if the data is one-like.
+    pub fn is_one(&self) -> bool {
+        match self {
+            Self::One(_) => true,
+            Self::Leaf(_) | Self::Many(_) => false,
+        }
+    }
+    /// True if the data is many-like.
+    pub fn is_many(&self) -> bool {
+        match self {
+            Self::Many(_) => true,
+            Self::Leaf(_) | Self::One(_) => false,
+        }
+    }
 }
 
-impl DataTyp {
-    pub fn typ(&self) -> &rust::Typ {
+impl DataType {
+    pub fn typ(&self) -> &Type {
         match self {
             Self::Leaf(leaf) => leaf.typ(),
             Self::One(one) => one.typ(),
@@ -398,28 +431,28 @@ impl DataTyp {
         }
     }
 
-    pub fn frame_typ(&self, cxt: &impl cxt::PreCxtLike, is_own: IsOwn) -> rust::Typ {
+    pub fn frame_typ(&self, cxt: &impl cxt::PreCxtLike, is_own: IsOwn) -> Type {
         match self {
             Self::Leaf(leaf) => leaf.frame_typ(cxt, is_own),
             Self::One(one) => one.frame_typ(cxt, is_own),
             Self::Many(many) => many.frame_typ(cxt, is_own),
         }
     }
-    pub fn frame_der(&self, cxt: &impl cxt::PreCxtLike, is_own: IsOwn) -> Option<rust::Typ> {
+    pub fn frame_der(&self, cxt: &impl cxt::PreCxtLike, is_own: IsOwn) -> Option<Type> {
         match self {
             Self::Leaf(leaf) => leaf.frame_der(cxt, is_own),
             Self::One(one) => one.frame_der(cxt, is_own),
             Self::Many(many) => many.frame_der(cxt, is_own),
         }
     }
-    pub fn frame_res(&self, cxt: &impl cxt::PreCxtLike, is_own: IsOwn) -> rust::Typ {
+    pub fn frame_res(&self, cxt: &impl cxt::PreCxtLike, is_own: IsOwn) -> Type {
         match self {
             Self::Leaf(leaf) => leaf.frame_res(cxt, is_own),
             Self::One(one) => one.frame_res(cxt, is_own),
             Self::Many(many) => many.frame_res(cxt, is_own),
         }
     }
-    pub fn zip_res(&self, cxt: &impl cxt::PreCxtLike, is_own: IsOwn) -> rust::Typ {
+    pub fn zip_res(&self, cxt: &impl cxt::PreCxtLike, is_own: IsOwn) -> Type {
         match self {
             Self::Leaf(leaf) => leaf.zip_res(cxt, is_own),
             Self::One(one) => one.zip_res(cxt, is_own),
@@ -436,7 +469,7 @@ impl DataTyp {
     }
 }
 
-impl DataTyp {
+impl DataType {
     pub fn to_expr_data_tokens(&self, stream: &mut TokenStream) {
         match self {
             Self::Leaf(leaf) => leaf.typ().to_tokens(stream),
@@ -456,12 +489,12 @@ implement! {
                 self.typ().to_token_stream()
             )
         }
-        Deref<DataTyp> {
+        Deref<DataType> {
             |self| &self.data
         }
     }
 
-    impl DataTyp {
+    impl DataType {
         From<Leaf> {
             |leaf| Self::Leaf(leaf)
         }
@@ -478,11 +511,11 @@ pub mod front {
     use super::*;
 
     /// True if the type mentions `Self` or an path-prefix-free expression id appearing in `cxt`.
-    pub fn mentions_expr(cxt: &cxt::PreCxt, typ: &rust::Typ) -> Res<bool> {
-        let mut todo: Vec<Either<&rust::Typ, &syn::Path>> = vec![Either::Left(typ)];
+    pub fn mentions_expr(cxt: &cxt::PreCxt, typ: &Type) -> Res<bool> {
+        let mut todo: Vec<Either<&Type, &syn::Path>> = vec![Either::Left(typ)];
 
         while let Some(typ_or_path) = todo.pop() {
-            use rust::Typ::*;
+            use Type::*;
             match typ_or_path {
                 Either::Right(path) => {
                     let mut path = path.segments.iter();
@@ -542,14 +575,14 @@ pub mod front {
 
     pub fn is_infer<'a>(mut args: impl Iterator<Item = &'a rust::GenericArg>) -> bool {
         match (args.next(), args.next()) {
-            (Some(rust::GenericArg::Type(rust::Typ::Infer(_))), None) => true,
+            (Some(rust::GenericArg::Type(Type::Infer(_))), None) => true,
             _ => false,
         }
     }
 
     #[derive(Clone, Debug, PartialEq, Eq)]
     pub enum Rec {
-        Slf(rust::Id),
+        Slf(Ident),
         Expr {
             e_idx: idx::Expr,
             args: rust::GenericArgs,
@@ -577,7 +610,7 @@ pub mod front {
     pub enum Resolved {
         None,
         Plain { wrap: one::Wrap, rec: Rec },
-        Coll { coll: rust::Id, rec: Rec },
+        Coll { coll: Ident, rec: Rec },
     }
     impl Resolved {
         pub fn into_data_typ(
@@ -586,10 +619,10 @@ pub mod front {
             e_idx: idx::Expr,
             v_idx: idx::Variant,
             d_idx: idx::Data,
-            d_id: Option<&rust::Id>,
-            typ: &rust::Typ,
-        ) -> Res<DataTyp> {
-            let res: DataTyp = match self {
+            d_id: Option<&Ident>,
+            typ: &Type,
+        ) -> Res<DataType> {
+            let res: DataType = match self {
                 Self::None => Leaf::new(typ.clone()).into(),
                 Self::Plain { wrap, rec } => {
                     let one = rec.into_one(cxt, e_idx, v_idx, d_idx, wrap);
@@ -795,13 +828,13 @@ pub mod front {
         Ok(res)
     }
 
-    pub fn resolve_typ(cxt: &mut cxt::PreCxt, typ: &rust::Typ) -> Res<Resolved> {
+    pub fn resolve_typ(cxt: &mut cxt::PreCxt, typ: &Type) -> Res<Resolved> {
         let mut res = Resolved::None;
 
         {
             let mut typ = typ;
             'peel: loop {
-                use rust::Typ::*;
+                use Type::*;
 
                 match typ {
                     Paren(paren) => typ = &*paren.elem,

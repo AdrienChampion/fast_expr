@@ -24,7 +24,8 @@ pub use crate::{
     cxt::{self, Cxt},
     doc,
     err::{self, Result as Res},
-    expr, front, gen, log, logln, rust,
+    expr, front, gen, log, logln,
+    rust::{self, Ident, Type},
 };
 
 /// Used to indicate whether something was generated.
@@ -107,21 +108,29 @@ pub mod idx {
     }
 }
 
+/// A static slice to static string slices.
 pub type StaticPref = &'static [&'static str];
+/// A static string slice.
 pub type StaticTypId = &'static str;
 
+/// A static path.
 #[derive(Debug, Clone, Copy)]
 pub struct StaticTypPath {
+    /// Path prefix.
     pub pref: StaticPref,
+    /// Path final id.
     pub id: StaticTypId,
 }
 impl StaticTypPath {
+    /// Constructor.
     pub const fn new(pref: StaticPref, id: StaticTypId) -> Self {
         Self { pref, id }
     }
-    pub fn to_typ(&self, span: rust::Span, args: Option<rust::GenericArgs>) -> rust::Typ {
-        let pref = self.pref.iter().map(|id| rust::Id::new(id, span));
-        let id = rust::Id::new(self.id, span);
+
+    /// Type version of itself.
+    pub fn to_typ(&self, span: rust::Span, args: Option<rust::GenericArgs>) -> Type {
+        let pref = self.pref.iter().map(|id| Ident::new(id, span));
+        let id = Ident::new(self.id, span);
         rust::typ::simple_path(pref, id, args)
     }
 }
@@ -132,3 +141,38 @@ implement! {
         }
     }
 }
+
+// /// A function parameter for zip functions.
+// ///
+// /// Can come either from constant data, recursive one-expr data, or recursive many-expr data.
+// #[derive(Debug, Clone)]
+// pub enum FnParamKind {
+//     Cst(Type),
+//     One(idx::Expr, Type),
+//     Res(idx::Expr),
+//     ManyAcc(idx::Coll),
+//     Many(idx::Coll, idx::Expr),
+// }
+// impl FnParamKind {
+//     /// Turns itself into tokens.
+//     pub fn to_tokens(&self, cxt: cxt::ZipCxt, is_own: IsOwn) -> TokenStream {
+//         match self {
+//             Self::Cst(typ) => {
+//                 if is_own {
+//                     typ.to_token_stream()
+//                 } else {
+//                     syn::parse_quote!( &#typ )
+//                 }
+//             }
+//             Self::One(_e_idx, typ) => {
+//                 if is_own {
+//                     typ.to_token_stream()
+//                 } else {
+//                     syn::parse_quote!( &#typ )
+//                 }
+//             }
+//             Self::Res(e_idx) =>
+//             _ => todo!(),
+//         }
+//     }
+// }

@@ -101,33 +101,30 @@ macro_rules! static_typ_path {
 /// Convenience macro for implementing various traits.
 #[macro_export]
 macro_rules! implement {
+    () => {};
     (
-        $(
-            impl ($($t_params:tt)*) $slf_ty:ty {
-                $($impls:tt)*
-            }
-        )*
+        impl ($($t_params:tt)*) $slf_ty:ty {
+            $($impls:tt)*
+        }
+        $($tail:tt)*
     ) => {
-        $(
-            $crate::implement! {
-                @impl($slf_ty, $($t_params)*)
-                $($impls)*
-            }
-        )*
+        $crate::implement! {
+            @impl($slf_ty, $($t_params)*)
+            $($impls)*
+        }
+        $crate::implement! { $($tail)* }
     };
     (
-        $(
-            impl $slf_ty:ty {
-                $($impls:tt)*
-            }
-        )*
+        impl $slf_ty:ty {
+            $($impls:tt)*
+        }
+        $($tail:tt)*
     ) => {
-        $(
-            $crate::implement! {
-                @impl($slf_ty,)
-                $($impls)*
-            }
-        )*
+        $crate::implement! {
+            @impl($slf_ty,)
+            $($impls)*
+        }
+        $crate::implement! { $($tail)* }
     };
 
     (
@@ -179,7 +176,7 @@ macro_rules! implement {
         From<$src_ty:ty> $(
             where ( $($t_constraints:tt)* )
         )? {
-            |$src:ident| $def:expr
+            |$src:pat| $def:expr
         }
         $($tail:tt)*
     ) => {

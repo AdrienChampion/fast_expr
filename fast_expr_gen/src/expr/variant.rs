@@ -2,18 +2,24 @@
 
 prelude! {}
 
-// use expr::frame::Frame;
-
+/// A variant, stored inside a [`crate::expr::Expr`].
 #[derive(Debug, Clone)]
 pub struct Variant {
+    /// Expression index.
     e_idx: idx::Expr,
+    /// Variant index.
     v_idx: idx::Variant,
 
+    /// Variant's data.
     data: idx::DataMap<expr::Data>,
-    src: rust::Variant,
 
-    zip_handler_id: rust::Id,
-    zipper_go_up_id: rust::Id,
+    /// Identifier of the handler function for this variant.
+    zip_handler_id: Ident,
+    /// Identifier of the `go_up` function for this variant.
+    zipper_go_up_id: Ident,
+
+    /// Variant frontend version.
+    src: rust::Variant,
 }
 
 implement! {
@@ -25,32 +31,43 @@ implement! {
 }
 
 impl Variant {
+    /// Expression index.
     pub fn e_idx(&self) -> idx::Expr {
         self.e_idx
     }
+    /// Variant index.
     pub fn v_idx(&self) -> idx::Variant {
         self.v_idx
     }
-    pub fn v_id(&self) -> &rust::Id {
+
+    /// Variant id.
+    pub fn v_id(&self) -> &Ident {
         &self.src.ident
     }
+
+    /// Data accessor.
     pub fn data(&self) -> &idx::DataMap<expr::Data> {
         &self.data
     }
 
+    /// True if the variant mentions the expression type it belongs to.
     pub fn is_self_rec(&self) -> bool {
         self.data.iter().any(|data| data.is_self_rec())
     }
 
+    /// True if the variant contains leaf-like data.
     pub fn contains_leaf_data(&self) -> bool {
-        self.data.iter().any(expr::data::Data::is_leaf)
+        self.data.iter().any(|data| data.is_leaf())
     }
+
+    /// True if the variant is leaf-like, *i.e.* does not mention any expression type.
     pub fn is_leaf(&self) -> bool {
-        self.data.iter().all(expr::data::Data::is_leaf)
+        self.data.iter().all(|data| data.is_leaf())
     }
 }
 
 impl Variant {
+    /// Constructor from a frontend representation.
     pub fn from_front(
         cxt: &mut cxt::PreCxt,
         e_idx: idx::Expr,
@@ -92,6 +109,9 @@ impl Variant {
         })
     }
 
+    /// True if the variant is struct-like.
+    ///
+    /// Returns `None` if the variant is unit-like.
     pub fn is_struct_like(&self) -> Option<bool> {
         match &self.src.fields {
             syn::Fields::Named(_) => Some(true),
@@ -100,20 +120,16 @@ impl Variant {
         }
     }
 
-    // pub fn frame_variants(&self) -> &idx::DataMap<Option<expr::Frame>> {
-    //     &self.frames
-    // }
-    // pub fn has_frame_variants(&self) -> bool {
-    //     self.frames.iter().any(Option::is_some)
-    // }
-
-    pub fn zip_handler_id(&self) -> &rust::Id {
+    /// Identifier of this variant's handler function.
+    pub fn zip_handler_id(&self) -> &Ident {
         &self.zip_handler_id
     }
-    pub fn zipper_go_up_id(&self) -> &rust::Id {
+    /// Identifier of thi variant's `go_up` function.
+    pub fn zipper_go_up_id(&self) -> &Ident {
         &self.zipper_go_up_id
     }
 
+    /// Logs itself.
     pub fn log(&self, pref: &str, trailing_comma: bool) {
         let (open, close) = match self.is_struct_like() {
             None => (None, None),
@@ -132,6 +148,7 @@ impl Variant {
 
 /// # Expr-enum codegen functions.
 impl Variant {
+    /// Generates code for the fields of the variant.
     fn to_fields_tokens(
         &self,
         stream: &mut TokenStream,
@@ -148,6 +165,7 @@ impl Variant {
         })
     }
 
+    /// Generates code for the full variant in an expression type definition.
     pub fn to_expr_variant_tokens(&self, stream: &mut TokenStream) {
         stream.append_all(&self.src.attrs);
         self.src.ident.to_tokens(stream);
@@ -169,24 +187,31 @@ impl Variant {
         }
     }
 
-    pub fn to_constructor_tokens(&self) -> TokenStream {
+    /// Generates code for constructing this variant.
+    ///
+    /// The code just aggregates the data identifiers expected by this variant. It is the caller's
+    /// responsability to have these identifiers in scope, with whatever value the caller wants.
+    ///
+    /// Also, the variant's name is **not** prefixed with the expression's identifier.
+    pub fn to_constructor_tokens(&self, stream: &mut TokenStream) {
         let id = self.v_id();
         let data = self.data.iter().map(|data| data.param_id());
-        if self.is_struct_like().unwrap_or(false) {
-            quote! {
+        stream.extend(match self.is_struct_like() {
+            Some(true) => quote! {
                 #id { #(#data ,)* }
-            }
-        } else {
-            quote! {
+            },
+            Some(false) => quote! {
                 #id ( #(#data ,)* )
-            }
-        }
+            },
+            None => quote! { #id },
+        })
     }
 }
 
-/// # Expr zipper struct codgen functions
+/// # Expr zipper struct codegen functions
 impl Variant {
-    pub fn zip_produce_final_res(&self, cxt: &cxt::ZipCxt) -> TokenStream {
+    /// Codegen for the call to this variant's `go_up` function.
+    pub fn to_go_up_call_tokens(&self, cxt: &cxt::ZipCxt) -> TokenStream {
         let zip_field = &cxt.zip_ids().self_step_field();
         let go_up = &self.zipper_go_up_id;
         let data_params = self.data.iter().map(expr::data::Data::param_id);
@@ -199,7 +224,7 @@ impl Variant {
     }
 
     /// Builds the next frame for some data index.
-    pub fn zip_handle_variant_from(
+    pub fn to_next_frame_tokens(
         &self,
         cxt: &cxt::ZipCxt,
         is_own: bool,
@@ -213,14 +238,15 @@ impl Variant {
                 let mut d_idx = d_idx;
                 d_idx.inc();
                 if d_idx < self.data.len() {
-                    self.zip_handle_variant_from(cxt, is_own, d_idx)
+                    self.to_next_frame_tokens(cxt, is_own, d_idx)
                 } else {
-                    self.zip_produce_final_res(cxt)
+                    self.to_go_up_call_tokens(cxt)
                 }
             },
         )
     }
 
+    /// Codegen for this variant's handler function.
     pub fn to_zip_handler_fn_tokens(&self, cxt: &cxt::ZipCxt, is_own: bool) -> TokenStream {
         let e_cxt = &cxt[self.e_idx];
 
@@ -235,7 +261,7 @@ impl Variant {
             }
         });
 
-        let handle_variant = self.zip_handle_variant_from(cxt, is_own, idx::Data::zero());
+        let handle_variant = self.to_next_frame_tokens(cxt, is_own, idx::Data::zero());
 
         let vis = cxt.conf().secret_item_vis();
 

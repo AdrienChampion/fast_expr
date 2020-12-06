@@ -3,7 +3,7 @@
 use super::*;
 use syn::punctuated::Punctuated;
 
-fn new_segment(ident: Id, args: Option<GenericArgs>) -> syn::PathSegment {
+fn new_segment(ident: Ident, args: Option<GenericArgs>) -> syn::PathSegment {
     let arguments = {
         if let Some(gen_args) = args {
             let mut args = Punctuated::new();
@@ -28,8 +28,8 @@ fn new_segment(ident: Id, args: Option<GenericArgs>) -> syn::PathSegment {
     syn::PathSegment { ident, arguments }
 }
 
-fn typ_from_segments(segments: Punctuated<syn::PathSegment, rust::token::Colon2>) -> Typ {
-    Typ::Path(syn::TypePath {
+fn typ_from_segments(segments: Punctuated<syn::PathSegment, rust::token::Colon2>) -> Type {
+    Type::Path(syn::TypePath {
         qself: None,
         path: syn::Path {
             leading_colon: None,
@@ -38,7 +38,7 @@ fn typ_from_segments(segments: Punctuated<syn::PathSegment, rust::token::Colon2>
     })
 }
 
-pub fn plain(ident: Id, args: Option<GenericArgs>) -> Typ {
+pub fn plain(ident: Ident, args: Option<GenericArgs>) -> Type {
     let segments = {
         let mut segments = Punctuated::new();
         segments.push(new_segment(ident, args));
@@ -47,15 +47,15 @@ pub fn plain(ident: Id, args: Option<GenericArgs>) -> Typ {
     typ_from_segments(segments)
 }
 
-pub fn tuple(typs: impl IntoIterator<Item = Typ>) -> Typ {
-    Typ::Tuple(syn::TypeTuple {
+pub fn tuple(typs: impl IntoIterator<Item = Type>) -> Type {
+    Type::Tuple(syn::TypeTuple {
         paren_token: rust::token::Paren::default(),
         elems: typs.into_iter().collect(),
     })
 }
 
-fn internal_ref(lifetime: Option<Lifetime>, typ: Typ, is_mut: bool) -> Typ {
-    Typ::Reference(syn::TypeReference {
+fn internal_ref(lifetime: Option<Lifetime>, typ: Type, is_mut: bool) -> Type {
+    Type::Reference(syn::TypeReference {
         and_token: rust::token::And::default(),
         lifetime,
         mutability: if is_mut {
@@ -66,18 +66,32 @@ fn internal_ref(lifetime: Option<Lifetime>, typ: Typ, is_mut: bool) -> Typ {
         elem: Box::new(typ),
     })
 }
-pub fn reference(lifetime: Option<Lifetime>, typ: Typ) -> Typ {
+pub fn reference(lifetime: Option<Lifetime>, typ: Type) -> Type {
     internal_ref(lifetime, typ, false)
 }
-pub fn reference_mut(lifetime: Option<Lifetime>, typ: Typ) -> Typ {
+pub fn reference_if(cond: bool, lifetime: Option<Lifetime>, typ: Type) -> Type {
+    if cond {
+        reference(lifetime, typ)
+    } else {
+        typ
+    }
+}
+pub fn reference_mut(lifetime: Option<Lifetime>, typ: Type) -> Type {
     internal_ref(lifetime, typ, true)
+}
+pub fn reference_mut_if(cond: bool, lifetime: Option<Lifetime>, typ: Type) -> Type {
+    if cond {
+        reference_mut(lifetime, typ)
+    } else {
+        typ
+    }
 }
 
 pub fn simple_path(
-    path: impl IntoIterator<Item = Id>,
-    ident: Id,
+    path: impl IntoIterator<Item = Ident>,
+    ident: Ident,
     args: Option<GenericArgs>,
-) -> Typ {
+) -> Type {
     let segments = {
         let mut segments = Punctuated::new();
         for seg in path {
@@ -92,7 +106,7 @@ pub fn simple_path(
 pub mod param {
     use super::*;
 
-    pub fn from_id(ident: Id) -> TypParam {
+    pub fn from_id(ident: Ident) -> TypParam {
         TypParam {
             attrs: vec![],
             ident,
@@ -107,7 +121,7 @@ pub mod param {
 pub mod generic_param {
     use super::*;
 
-    pub fn from_id(id: Id) -> GenericParam {
+    pub fn from_id(id: Ident) -> GenericParam {
         GenericParam::Type(param::from_id(id))
     }
     pub fn from_lifetime(lifetime: rust::Lifetime) -> GenericParam {
@@ -123,7 +137,7 @@ pub mod generic_param {
 pub mod generic_arg {
     use super::*;
 
-    pub fn from_typ(typ: Typ) -> GenericArg {
+    pub fn from_typ(typ: Type) -> GenericArg {
         GenericArg::Type(typ)
     }
     pub fn from_lifetime(lt: Lifetime) -> GenericArg {
@@ -134,13 +148,13 @@ pub mod generic_arg {
 pub mod lib {
     use super::*;
 
-    pub fn empty() -> rust::Typ {
+    pub fn empty() -> Type {
         let path = Some(gen::lib_path());
-        let id = Id::new("Empty", gen::span());
+        let id = Ident::new("Empty", gen::span());
         rust::typ::simple_path(path, id, None)
     }
 
-    pub fn zipper(e_typ: rust::Typ) -> rust::Typ {
+    pub fn zipper(e_typ: Type) -> Type {
         let path = Some(gen::lib_path());
         simple_path(
             path,
@@ -148,7 +162,7 @@ pub mod lib {
             Some(vec![generic_arg::from_typ(e_typ)]),
         )
     }
-    pub fn stepper(e_typ: rust::Typ) -> rust::Typ {
+    pub fn stepper(e_typ: Type) -> Type {
         let path = Some(gen::lib_path());
         simple_path(
             path,
@@ -157,9 +171,9 @@ pub mod lib {
         )
     }
 
-    pub fn zip_do(down_typ: rust::Typ, e_typ: rust::Typ, res_typ: rust::Typ) -> rust::Typ {
+    pub fn zip_do(down_typ: Type, e_typ: Type, res_typ: Type) -> Type {
         let path = Some(gen::lib_path());
-        let id = Id::new("ZipDo", gen::span());
+        let id = Ident::new("ZipDo", gen::span());
         simple_path(
             path,
             id,
@@ -172,8 +186,8 @@ pub mod lib {
     }
 }
 
-pub fn to_expr_ref(typ: rust::Typ) -> Typ {
-    Typ::Reference(syn::TypeReference {
+pub fn to_expr_ref(typ: Type) -> Type {
+    Type::Reference(syn::TypeReference {
         and_token: rust::token::And {
             spans: [gen::span()],
         },
@@ -181,4 +195,18 @@ pub fn to_expr_ref(typ: rust::Typ) -> Typ {
         mutability: None,
         elem: Box::new(typ),
     })
+}
+pub fn to_expr_ref_if(cond: bool, typ: Type) -> Type {
+    if cond {
+        Type::Reference(syn::TypeReference {
+            and_token: rust::token::And {
+                spans: [gen::span()],
+            },
+            lifetime: Some(gen::lifetime::expr()),
+            mutability: None,
+            elem: Box::new(typ),
+        })
+    } else {
+        typ
+    }
 }

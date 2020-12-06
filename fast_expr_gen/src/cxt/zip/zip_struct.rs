@@ -5,10 +5,10 @@ prelude! {}
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ZipField {
     e_idx: idx::Expr,
-    id: rust::Id,
+    id: Ident,
 
-    own_typ: rust::Typ,
-    ref_typ: rust::Typ,
+    own_typ: Type,
+    ref_typ: Type,
 }
 impl ZipField {
     pub fn new(e_cxt: &cxt::frame::ECxt) -> Option<Self> {
@@ -28,7 +28,7 @@ impl ZipField {
         })
     }
 
-    pub fn typ(&self, is_own: IsOwn) -> &rust::Typ {
+    pub fn typ(&self, is_own: IsOwn) -> &Type {
         if is_own {
             &self.own_typ
         } else {
@@ -48,16 +48,16 @@ impl ZipField {
 #[derive(Debug, Clone)]
 pub struct ZipStruct {
     e_idx: idx::Expr,
-    id: rust::Id,
+    id: Ident,
     own_generics: rust::Generics,
     ref_generics: rust::Generics,
 
-    my_stack: Option<rust::Id>,
+    my_stack: Option<Ident>,
 
-    stepper_field_typ: rust::Id,
+    stepper_field_typ: Ident,
     stacks: Map<idx::Expr, ZipField>,
 
-    sink_id: rust::Id,
+    sink_id: Ident,
 }
 impl ZipStruct {
     pub fn new(cxt: &cxt::FrameCxt, e_idx: idx::Expr) -> Self {
@@ -178,7 +178,7 @@ impl ZipStruct {
         }
     }
 
-    pub fn id(&self) -> &rust::Id {
+    pub fn id(&self) -> &Ident {
         &self.id
     }
     pub fn generics(&self, is_own: IsOwn) -> &rust::Generics {
@@ -192,7 +192,7 @@ impl ZipStruct {
         &self.stacks
     }
 
-    pub fn sink_typ(&self, is_own: IsOwn) -> rust::Typ {
+    pub fn sink_typ(&self, is_own: IsOwn) -> Type {
         let generics = self.generics(is_own);
         let lifetimes = generics.lifetimes().map(|lt_def| &lt_def.lifetime);
         let typs = generics.type_params().map(|typ_param| &typ_param.ident);
@@ -266,8 +266,8 @@ impl ZipStruct {
     pub fn constructors(&self, cxt: &cxt::ZipCxt) -> TokenStream {
         let step_field = &cxt.zip_ids().step_field;
         let stepper_typ = &self.stepper_field_typ;
-        let capa = rust::Id::new("capacity", gen::span());
-        let capa_typ = rust::Id::new("usize", gen::span());
+        let capa = Ident::new("capacity", gen::span());
+        let capa_typ = Ident::new("usize", gen::span());
         let init_stacks = self.stacks.values().map(|stack| {
             let id = &stack.id;
             quote!(#id: std::vec::Vec::new())
@@ -330,7 +330,7 @@ impl ZipStruct {
             .fp_e_deps()
             .iter()
             .cloned()
-            .map(move |dep_e_idx| cxt[dep_e_idx].to_zip_handler_fn_tokens(cxt, is_own))
+            .map(move |dep_e_idx| cxt[dep_e_idx].to_zip_handlers_tokens(cxt, is_own))
     }
 
     pub fn frame_handlers<'a>(

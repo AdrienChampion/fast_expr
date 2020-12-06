@@ -147,6 +147,6 @@ pub mod internal {
     ///
     /// Internally, this is used in the frame enums generated for each expression structure.
     ///
-    /// [`Empty`]: ./enum.Empty.html
+    /// [`Empty`]: crate::internal::Empty (Empty enum)
     pub type Sink<T> = (std::marker::PhantomData<T>, Empty);
 }
