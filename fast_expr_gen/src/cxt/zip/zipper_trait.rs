@@ -165,7 +165,7 @@ impl VariantHandler {
         }
     }
 
-    fn internal_to_go_up_tokens(
+    pub fn custom_to_go_up_tokens(
         &self,
         cxt: &cxt::ZipCxt,
         is_own: IsOwn,
@@ -198,7 +198,7 @@ impl VariantHandler {
     }
 
     pub fn to_go_up_tokens(&self, cxt: &cxt::ZipCxt, is_own: IsOwn) -> TokenStream {
-        self.internal_to_go_up_tokens(cxt, is_own, None)
+        self.custom_to_go_up_tokens(cxt, is_own, None)
     }
 
     pub fn to_auto_impl_tokens(
@@ -208,7 +208,7 @@ impl VariantHandler {
         from: &impl ToTokens,
     ) -> TokenStream {
         let params = self.go_up_params.iter().map(|param| param.id());
-        self.internal_to_go_up_tokens(
+        self.custom_to_go_up_tokens(
             cxt,
             is_own,
             Some(auto_impl_call(&self.go_up_id, params, from)),
@@ -293,7 +293,7 @@ impl CollFolder {
         &self.id
     }
 
-    fn internal_to_tokens(
+    pub fn custom_to_tokens(
         &self,
         cxt: &cxt::ZipCxt,
         is_own: IsOwn,
@@ -334,7 +334,7 @@ impl CollFolder {
     }
 
     pub fn to_decl_tokens(&self, cxt: &cxt::ZipCxt, is_own: IsOwn) -> TokenStream {
-        self.internal_to_tokens(cxt, is_own, None)
+        self.custom_to_tokens(cxt, is_own, None)
     }
     pub fn to_auto_impl_tokens(
         &self,
@@ -343,7 +343,7 @@ impl CollFolder {
         from: &impl ToTokens,
     ) -> TokenStream {
         let params = self.params.iter().map(|param| param.id());
-        self.internal_to_tokens(cxt, is_own, Some(auto_impl_call(&self.id, params, from)))
+        self.custom_to_tokens(cxt, is_own, Some(auto_impl_call(&self.id, params, from)))
     }
 
     pub fn to_call_tokens(&self, cxt: &cxt::ZipCxt, res: impl ToTokens) -> TokenStream {
@@ -425,7 +425,7 @@ impl CollInitializer {
         &self.id
     }
 
-    pub fn internal_to_tokens(
+    pub fn custom_to_tokens(
         &self,
         cxt: &cxt::ZipCxt,
         is_own: IsOwn,
@@ -466,7 +466,7 @@ impl CollInitializer {
     }
 
     pub fn to_decl_tokens(&self, cxt: &cxt::ZipCxt, is_own: IsOwn) -> TokenStream {
-        self.internal_to_tokens(cxt, is_own, None)
+        self.custom_to_tokens(cxt, is_own, None)
     }
 
     pub fn to_auto_impl_tokens(
@@ -476,7 +476,7 @@ impl CollInitializer {
         from: &impl ToTokens,
     ) -> TokenStream {
         let params = self.params.iter().map(|param| param.id());
-        self.internal_to_tokens(cxt, is_own, Some(auto_impl_call(&self.id, params, from)))
+        self.custom_to_tokens(cxt, is_own, Some(auto_impl_call(&self.id, params, from)))
     }
 
     pub fn to_call_tokens(&self) -> TokenStream {

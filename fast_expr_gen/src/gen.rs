@@ -403,6 +403,12 @@ impl Lib {
             }
         }
     }
+
+    pub fn impl_macro_name(&self, expr_id: &rust::Ident, is_own: IsOwn) -> Ident {
+        let expr_id = rust::try_snake_from(&expr_id);
+        let name = format!("impl_{}{}", expr_id, if is_own { "" } else { "_ref" });
+        rust::Ident::new(&name, span())
+    }
 }
 
 #[derive(Debug, Clone)]

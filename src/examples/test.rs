@@ -1,5 +1,6 @@
 //! Main fast-expr test example.
 
+#[doc(hidden)]
 pub mod fast_expr {
     pub use crate::*;
 }
@@ -102,3 +103,26 @@ crate::fast_expr! {
         ),
     }
 }
+
+// #[derive(Debug, Clone, Copy)]
+// struct Printer;
+
+// impl<'fast_expr, BSpec, ISpec> zip_ref::ExprZipSpec<'fast_expr, BSpec, ISpec> for Printer
+// where
+//     BSpec: BoolSpec,
+//     ISpec: IntSpec,
+// {
+//     impl_expr_ref! {
+//         zip(Expr to ()) {
+
+//         }
+
+//         zip(BExpr to ()) {
+
+//         }
+
+//         zip(IExpr to ()) {
+
+//         }
+//     }
+// }

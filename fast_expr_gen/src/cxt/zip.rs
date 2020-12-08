@@ -126,7 +126,7 @@ impl ECxt {
         if *self.e_conf().zip_gen {
             tokens.extend(self.to_zip_trait_tokens(cxt, is_own));
             tokens.extend(self.to_zip_struct_tokens(cxt, is_own));
-            // tokens.extend(self.helpers.to_tokens(cxt, is_own));
+            tokens.extend(self.impl_macro_tokens(cxt, is_own));
         }
         tokens
     }
@@ -528,5 +528,191 @@ impl ECxt {
                 #frame_zip_do_cases
             }
         })
+    }
+}
+
+/// # Helper impl-Macro Codegen
+impl ECxt {
+    /// Generates a dummy implementation for the zip spec trait of this expression type.
+    pub fn impl_macro_dummy_impl_tokens(&self, cxt: &cxt::ZipCxt, is_own: IsOwn) -> TokenStream {
+        let expr_tokens = self.fp_e_deps().iter().cloned().map(|e_idx| {
+            let e_cxt = &cxt[e_idx];
+            // let expr = e_cxt.expr();
+
+            let res_typ = e_cxt.res_typ();
+            let acc_typs = e_cxt.colls().iter().map(|coll| coll.acc_t_param_id());
+
+            let variant_handlers = e_cxt.variant_handlers().iter().map(|handler| {
+                handler.custom_to_go_up_tokens(
+                    cxt,
+                    is_own,
+                    Some(quote! {
+                        todo!()
+                    }),
+                )
+            });
+
+            let coll_handlers = e_cxt.coll_handlers().iter().map(|handler| {
+                let init =
+                    handler
+                        .initializer()
+                        .custom_to_tokens(cxt, is_own, Some(quote!(todo!())));
+                let fold = handler
+                    .folder()
+                    .custom_to_tokens(cxt, is_own, Some(quote!(todo!())));
+                quote! {
+                    #init
+                    #fold
+                }
+            });
+
+            quote! {
+                type #res_typ = ();
+                #(
+                    type #acc_typs = ();
+                )*
+
+                #(#variant_handlers)*
+                #(#coll_handlers)*
+            }
+        });
+
+        quote! {
+            #(#expr_tokens)*
+        }
+    }
+
+    /// Generates the macro-cases for this expression.
+    pub fn impl_macro_cases_tokens(
+        &self,
+        _cxt: &cxt::ZipCxt,
+        _is_own: IsOwn,
+        macro_ident: &rust::Ident,
+    ) -> TokenStream {
+        let expr = self.expr();
+        let e_id = self.e_id();
+
+        let macro_res_ty = self.res_typ();
+
+        let variant_case_pref = quote! {
+            @ #e_id ($#macro_res_ty : ty)
+        };
+
+        let variant_cases = expr.variants().iter().map(|variant| {
+            let v_id = variant.v_id();
+
+            let lhs = {
+                let mut lhs = quote! { #variant_case_pref #v_id };
+                let data_list = variant.data().iter().map(|data| {
+                    let d_id = data.param_id();
+                    quote! {
+                        $#d_id : pat
+                    }
+                });
+                match variant.is_struct_like() {
+                    Some(true) => lhs.extend(quote! {
+                        { #(#data_list),* $(,)? }
+                    }),
+                    Some(false) => lhs.extend(quote! {
+                        ( #(#data_list),* $(,)? )
+                    }),
+                    None => (),
+                }
+
+                lhs.extend(quote! {
+                    => $def:expr
+                    $(, $($tail:tt)* )?
+                });
+
+                lhs
+            };
+
+            let rhs = quote! {
+                #macro_ident! {
+                    @ #e_id ($#macro_res_ty) $( $($tail)* )?
+                }
+            };
+
+            quote! {
+                { #lhs } => { #rhs };
+            }
+        });
+
+        quote! {
+            {
+                zip(#e_id to $#macro_res_ty : ty) {
+                    $($cases:tt)*
+                }
+                $($tail:tt)*
+            } => {
+                #macro_ident ! {
+                    @ #e_id ($#macro_res_ty)
+                    $($cases)*
+                }
+                #macro_ident! {
+                    $($tail)*
+                }
+            };
+
+            { #variant_case_pref } => {};
+
+            #(#variant_cases)*
+        }
+    }
+
+    /// Generates the impl-macro for this expression.
+    pub fn impl_macro_tokens(&self, cxt: &cxt::ZipCxt, is_own: IsOwn) -> TokenStream {
+        let macro_ident = cxt.lib_gen().impl_macro_name(self.e_id(), is_own);
+
+        let cases = self
+            .fp_e_deps()
+            .iter()
+            .cloned()
+            .map(|e_idx| cxt[e_idx].impl_macro_cases_tokens(cxt, is_own, &macro_ident));
+
+        let legal_e_ids = self
+            .fp_e_deps()
+            .iter()
+            .cloned()
+            .enumerate()
+            .map(|(idx, e_idx)| {
+                if idx > 0 {
+                    format!(", `{}`", cxt[e_idx].e_id())
+                } else {
+                    format!("`{}`", cxt[e_idx].e_id())
+                }
+            });
+
+        let impl_dummy_tokens = self.impl_macro_dummy_impl_tokens(cxt, is_own);
+
+        quote! {
+            macro_rules! #macro_ident {
+                #(#cases)*
+
+                { @ dummy tokens } => {
+                    #impl_dummy_tokens
+                };
+
+                {
+                    zip($unknown_e_id:ident $($tail_1:tt)*)
+                    $($tail_2:tt)*
+                } => {
+                    #macro_ident! { @ dummy tokens }
+                    compile_error! { concat!(
+                        "unexpected expression-type identifier `", stringify!($unknown_e_id),
+                        "`, expected one of ",
+                        #(#legal_e_ids,)*
+                    ) }
+                };
+                {} => {};
+                { $($pebcak:tt)* } => {
+                    #macro_ident! { @ dummy tokens }
+                    compile_error! {
+                        "expected a list of zip specification items of form \
+                        `zip(<expr_type_ident> to <expr_type_result>) { ... }`"
+                    }
+                };
+            }
+        }
     }
 }
