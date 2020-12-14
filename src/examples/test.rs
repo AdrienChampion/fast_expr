@@ -107,13 +107,15 @@ crate::fast_expr! {
 // #[derive(Debug, Clone, Copy)]
 // struct Printer;
 
-// impl<'fast_expr, BSpec, ISpec> zip_ref::ExprZipSpec<'fast_expr, BSpec, ISpec> for Printer
+// impl<'expr, BSpec, ISpec> zip_ref::ExprZipSpec<'expr, BSpec, ISpec> for Printer
 // where
 //     BSpec: BoolSpec,
 //     ISpec: IntSpec,
 // {
 //     impl_expr_ref! {
-//         zip(Expr to ()) {
+//         lifetime: 'expr,
+
+//         zip(FuckExpr to ()) {
 
 //         }
 

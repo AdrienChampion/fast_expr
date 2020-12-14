@@ -180,6 +180,22 @@ impl One {
             rust::typ::to_expr_ref(typ)
         }
     }
+    pub fn frame_typ_tokens(
+        &self,
+        _cxt: &impl cxt::PreCxtLike,
+        is_own: IsOwn,
+        expr_lt: Option<&TokenStream>,
+    ) -> TokenStream {
+        let typ = self.typ.to_token_stream();
+        if is_own {
+            typ
+        } else if let Some(lt) = expr_lt {
+            quote! { & #lt #typ }
+        } else {
+            let lt = gen::lifetime::expr();
+            quote! { & #lt #typ }
+        }
+    }
     pub fn frame_der(&self, _cxt: &impl cxt::PreCxtLike, _is_own: IsOwn) -> Option<Type> {
         None
     }
@@ -189,6 +205,15 @@ impl One {
     pub fn zip_res(&self, _cxt: &impl cxt::PreCxtLike, _is_own: IsOwn) -> Type {
         let res = &self.res_typ;
         syn::parse_quote!(Self :: #res)
+    }
+    pub fn zip_res_tokens(
+        &self,
+        cxt: &impl cxt::PreCxtLike,
+        is_own: IsOwn,
+        _expr_lt: Option<&TokenStream>,
+    ) -> TokenStream {
+        let res = self.zip_res(cxt, is_own);
+        quote!(#res)
     }
 }
 

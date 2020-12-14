@@ -438,6 +438,18 @@ impl DataType {
             Self::Many(many) => many.frame_typ(cxt, is_own),
         }
     }
+    pub fn frame_typ_tokens(
+        &self,
+        cxt: &impl cxt::PreCxtLike,
+        is_own: IsOwn,
+        expr_lt: Option<&TokenStream>,
+    ) -> TokenStream {
+        match self {
+            Self::Leaf(leaf) => leaf.frame_typ_tokens(cxt, is_own, expr_lt),
+            Self::One(one) => one.frame_typ_tokens(cxt, is_own, expr_lt),
+            Self::Many(many) => many.frame_typ_tokens(cxt, is_own, expr_lt),
+        }
+    }
     pub fn frame_der(&self, cxt: &impl cxt::PreCxtLike, is_own: IsOwn) -> Option<Type> {
         match self {
             Self::Leaf(leaf) => leaf.frame_der(cxt, is_own),
@@ -457,6 +469,18 @@ impl DataType {
             Self::Leaf(leaf) => leaf.zip_res(cxt, is_own),
             Self::One(one) => one.zip_res(cxt, is_own),
             Self::Many(many) => many.zip_res(cxt, is_own),
+        }
+    }
+    pub fn zip_res_tokens(
+        &self,
+        cxt: &impl cxt::PreCxtLike,
+        is_own: IsOwn,
+        expr_lt: Option<&TokenStream>,
+    ) -> TokenStream {
+        match self {
+            Self::Leaf(leaf) => leaf.zip_res_tokens(cxt, is_own, expr_lt),
+            Self::One(one) => one.zip_res_tokens(cxt, is_own, expr_lt),
+            Self::Many(many) => many.zip_res_tokens(cxt, is_own, expr_lt),
         }
     }
 

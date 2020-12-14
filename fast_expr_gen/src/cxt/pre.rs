@@ -254,6 +254,22 @@ impl ECxt {
         }
         typ
     }
+    /// Plain type under a reference if asked.
+    pub fn plain_typ_tokens_for(
+        &self,
+        is_own: IsOwn,
+        expr_lt: Option<&TokenStream>,
+    ) -> TokenStream {
+        let typ = self.plain_typ();
+        if is_own {
+            quote! { #typ }
+        } else if let Some(lt) = expr_lt {
+            quote! { &#lt #typ }
+        } else {
+            let lt = gen::lifetime::expr();
+            quote! { &#lt #typ }
+        }
+    }
 
     /// Identifier accessor.
     pub fn e_id(&self) -> &Ident {

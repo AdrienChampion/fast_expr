@@ -1,3 +1,8 @@
+//! Top context level.
+//!
+//! Augments frame contexts with the data necessary to generate the zip struct and zip spec trait
+//! for each expression.
+
 use super::*;
 
 pub mod zip_struct;
@@ -534,7 +539,12 @@ impl ECxt {
 /// # Helper impl-Macro Codegen
 impl ECxt {
     /// Generates a dummy implementation for the zip spec trait of this expression type.
-    pub fn impl_macro_dummy_impl_tokens(&self, cxt: &cxt::ZipCxt, is_own: IsOwn) -> TokenStream {
+    pub fn impl_macro_dummy_impl_tokens(
+        &self,
+        cxt: &cxt::ZipCxt,
+        is_own: IsOwn,
+        expr_lt: Option<&TokenStream>,
+    ) -> TokenStream {
         let expr_tokens = self.fp_e_deps().iter().cloned().map(|e_idx| {
             let e_cxt = &cxt[e_idx];
             // let expr = e_cxt.expr();
@@ -546,6 +556,7 @@ impl ECxt {
                 handler.custom_to_go_up_tokens(
                     cxt,
                     is_own,
+                    expr_lt,
                     Some(quote! {
                         todo!()
                     }),
@@ -553,13 +564,16 @@ impl ECxt {
             });
 
             let coll_handlers = e_cxt.coll_handlers().iter().map(|handler| {
-                let init =
+                let init = handler.initializer().custom_to_tokens(
+                    cxt,
+                    is_own,
+                    expr_lt,
+                    Some(quote!(todo!())),
+                );
+                let fold =
                     handler
-                        .initializer()
-                        .custom_to_tokens(cxt, is_own, Some(quote!(todo!())));
-                let fold = handler
-                    .folder()
-                    .custom_to_tokens(cxt, is_own, Some(quote!(todo!())));
+                        .folder()
+                        .custom_to_tokens(cxt, is_own, expr_lt, Some(quote!(todo!())));
                 quote! {
                     #init
                     #fold
@@ -586,16 +600,29 @@ impl ECxt {
     pub fn impl_macro_cases_tokens(
         &self,
         _cxt: &cxt::ZipCxt,
-        _is_own: IsOwn,
+        is_own: IsOwn,
         macro_ident: &rust::Ident,
     ) -> TokenStream {
         let expr = self.expr();
         let e_id = self.e_id();
 
         let macro_res_ty = self.res_typ();
+        let lt_ident = quote! { expr_lt };
+        let lt_tokens = if is_own {
+            quote! {}
+        } else {
+            quote! { $#lt_ident }
+        };
+        let lt_match = if is_own {
+            quote! {}
+        } else {
+            quote! { #lt_tokens:lifetime }
+        };
+        let pref_match = quote! { @(#lt_match) };
+        let pref_tokens = quote! { @(#lt_tokens) };
 
         let variant_case_pref = quote! {
-            @ #e_id ($#macro_res_ty : ty)
+            #pref_match #e_id ($#macro_res_ty : ty)
         };
 
         let variant_cases = expr.variants().iter().map(|variant| {
@@ -629,7 +656,7 @@ impl ECxt {
 
             let rhs = quote! {
                 #macro_ident! {
-                    @ #e_id ($#macro_res_ty) $( $($tail)* )?
+                    #pref_tokens #e_id ($#macro_res_ty) $( $($tail)* )?
                 }
             };
 
@@ -638,18 +665,22 @@ impl ECxt {
             }
         });
 
+        let res_typ = self.res_typ();
+
         quote! {
             {
-                zip(#e_id to $#macro_res_ty : ty) {
+                #pref_match zip(#e_id to $#macro_res_ty : ty) {
                     $($cases:tt)*
-                }
+                } $(,)?
                 $($tail:tt)*
             } => {
+                type #res_typ = $#macro_res_ty;
                 #macro_ident ! {
-                    @ #e_id ($#macro_res_ty)
+                    #pref_tokens #e_id ($#macro_res_ty)
                     $($cases)*
                 }
                 #macro_ident! {
+                    #pref_tokens
                     $($tail)*
                 }
             };
@@ -683,33 +714,73 @@ impl ECxt {
                 }
             });
 
-        let impl_dummy_tokens = self.impl_macro_dummy_impl_tokens(cxt, is_own);
+        let expr_lt = if is_own {
+            None
+        } else {
+            Some(quote! { $ expr_lt })
+        };
+
+        let dummy_token_args = expr_lt.as_ref().map(|lt| quote! { #lt : lifetime });
+        let impl_dummy_tokens = self.impl_macro_dummy_impl_tokens(cxt, is_own, expr_lt.as_ref());
+
+        let catch_lifetime = if let Some(expr_lt) = &expr_lt {
+            quote! {
+                { lifetime: #expr_lt :lifetime , $($stuff:tt)* } => {
+                    #macro_ident! { @(#expr_lt) $($stuff)* }
+                };
+            }
+        } else {
+            quote! {
+                { $($stuff:tt)* } => {
+                    #macro_ident! { @() $($stuff)* }
+                };
+            }
+        };
+
+        let top_level_error = "\
+            a list of zip specification items of form \
+            `zip(<expr_type_ident> to <expr_type_result>) { ... }`\
+        ";
+        let top_level_error = if is_own {
+            format!("expected {}", top_level_error)
+        } else {
+            format!(
+                "expected expression lifetime info of form `lifetime: <lifetime> ,` \
+                followed by {}",
+                top_level_error,
+            )
+        };
 
         quote! {
             macro_rules! #macro_ident {
+                #catch_lifetime
+
                 #(#cases)*
 
-                { @ dummy tokens } => {
+                { @ dummy tokens ( #dummy_token_args ) } => {
                     #impl_dummy_tokens
                 };
 
                 {
-                    zip($unknown_e_id:ident $($tail_1:tt)*)
+                    @ ($($args:tt)*) zip($unknown_e_id:ident $($tail_1:tt)*)
                     $($tail_2:tt)*
                 } => {
-                    #macro_ident! { @ dummy tokens }
+                    #macro_ident! { @ dummy tokens ($($args)*) }
                     compile_error! { concat!(
                         "unexpected expression-type identifier `", stringify!($unknown_e_id),
                         "`, expected one of ",
                         #(#legal_e_ids,)*
                     ) }
                 };
-                {} => {};
-                { $($pebcak:tt)* } => {
-                    #macro_ident! { @ dummy tokens }
+                { @ ($($ignore:tt)*) } => {};
+                { @ () $($pebcak:tt)* } => {
                     compile_error! {
-                        "expected a list of zip specification items of form \
-                        `zip(<expr_type_ident> to <expr_type_result>) { ... }`"
+                        concat!( "1", #top_level_error)
+                    }
+                };
+                { $($pebcak:tt)* } => {
+                    compile_error! {
+                        concat!( "2", #top_level_error, "   " $(, " ", stringify!($pebcak))*)
                     }
                 };
             }

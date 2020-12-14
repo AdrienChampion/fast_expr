@@ -101,6 +101,43 @@ impl ParamKind {
         }
     }
 
+    pub fn typ_tokens(
+        &self,
+        cxt: &impl cxt::FrameCxtLike,
+        Data {
+            e_idx,
+            v_idx,
+            d_idx,
+        }: Data,
+        is_own: IsOwn,
+        expr_lt: Option<&TokenStream>,
+    ) -> TokenStream {
+        let data = &cxt.get_frame_e_cxt(e_idx).expr()[v_idx][d_idx];
+        match *self {
+            Self::Leaf { is_ref } => {
+                let mut typ = data.frame_typ_tokens(cxt, is_own, expr_lt);
+                if is_ref {
+                    typ = quote! { & #typ }
+                }
+                typ
+            }
+            Self::One { is_ref, is_res } | Self::Many { is_ref, is_res } => {
+                let mut typ = if is_res {
+                    data.zip_res(cxt, is_own).to_token_stream()
+                } else {
+                    data.frame_typ_tokens(cxt, is_own, expr_lt)
+                };
+                if is_ref {
+                    typ = quote! { & #typ }
+                }
+                typ
+            }
+            Self::ManyIter { ref acc, ref res } => {
+                quote! { (#acc, #res) }
+            }
+        }
+    }
+
     pub fn typ_with_forced_many_acc(
         &self,
         cxt: &impl cxt::FrameCxtLike,
@@ -212,9 +249,14 @@ impl FnParam {
             .typ_with_forced_many_acc(cxt, self.data, is_own, many_acc)
     }
 
-    pub fn to_tokens(&self, cxt: &impl cxt::FrameCxtLike, is_own: IsOwn) -> TokenStream {
+    pub fn to_tokens(
+        &self,
+        cxt: &impl cxt::FrameCxtLike,
+        is_own: IsOwn,
+        expr_lt: Option<&TokenStream>,
+    ) -> TokenStream {
         let id = &self.id;
-        let typ = self.typ(cxt, is_own);
+        let typ = self.kind.typ_tokens(cxt, self.data, is_own, expr_lt);
         quote!(#id: #typ)
     }
 }
