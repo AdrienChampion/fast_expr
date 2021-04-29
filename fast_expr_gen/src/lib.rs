@@ -61,6 +61,9 @@ impl<Acc, Iter> CollDer<Acc, Iter> {
     }
 }
 
+/// Alias for [`ZipDo`] where the `Down` variant is inhabited.
+///
+/// [`ZipDo`]: ./enum.ZipDo.html
 pub type ZipUp<Expr, Res> = ZipDo<internal::Empty, Expr, Res>;
 
 /// An order for an expression zipper.
@@ -68,6 +71,7 @@ pub type ZipUp<Expr, Res> = ZipDo<internal::Empty, Expr, Res>;
 /// When implementing the `Zipper` trait for a custom zipper over an expression structure, some of
 /// the functions to implement will return a `ZipDo`. This means these functions have to tell the
 /// zipper what to do next.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ZipDo<Down, Expr, Res> {
     /// The zipper will keep going through the structure following the normal flow.
     GoDown(Down),
@@ -111,6 +115,96 @@ impl<Expr, Res> ZipDo<internal::Empty, Expr, Res> {
     pub fn empty_convert<Down>(self) -> ZipDo<Down, Expr, Res> {
         self.map_go_down(|empty| match empty {})
     }
+}
+
+/// Wraps its input in [`ZipDo::GoDown`].
+///
+/// ```rust
+/// # use fast_expr_gen::{ZipDo, down};
+/// let down_1: ZipDo<u8, u32, u64> = down!(7u8);
+/// let down_2: ZipDo<u8, u32, u64> = ZipDo::GoDown(7);
+/// assert_eq!(down_1, down_2)
+/// ```
+///
+/// [`ZipDo::GoDown`]: ./enum.ZipDo.html#variant.GoDown
+#[macro_export]
+macro_rules! down {
+    {$e:expr} => {$crate::ZipDo::GoDown($e)};
+}
+
+/// Wraps its input in [`ZipDo::GoDown`].
+///
+/// ```rust
+/// # use fast_expr_gen::{ZipDo, proceed};
+/// let proceed_1: ZipDo<u8, u32, u64> = proceed!(7u8);
+/// let proceed_2: ZipDo<u8, u32, u64> = ZipDo::GoDown(7);
+/// assert_eq!(proceed_1, proceed_2)
+/// ```
+///
+/// [`ZipDo::GoDown`]: ./enum.ZipDo.html#variant.GoDown
+#[macro_export]
+macro_rules! proceed {
+    {$e:expr} => {$crate::down!($e)};
+}
+
+/// Wraps its input in [`ZipDo::GoUp`].
+///
+/// ```rust
+/// # use fast_expr_gen::{ZipDo, up};
+/// let up_1: ZipDo<u8, u32, u64> = up!(7u64);
+/// let up_2: ZipDo<u8, u32, u64> = ZipDo::GoUp(7);
+/// assert_eq!(up_1, up_2)
+/// ```
+///
+/// [`ZipDo::GoUp`]: ./enum.ZipDo.html#variant.GoUp
+#[macro_export]
+macro_rules! up {
+    {$e:expr} => {$crate::ZipDo::GoUp($e)};
+}
+
+/// Wraps its input in [`ZipDo::Early`].
+///
+/// ```rust
+/// # use fast_expr_gen::{ZipDo, early};
+/// let early_1: ZipDo<u8, u32, u64> = early!(7u64);
+/// let early_2: ZipDo<u8, u32, u64> = ZipDo::Early(7);
+/// assert_eq!(early_1, early_2)
+/// ```
+///
+/// [`ZipDo::Early`]: ./enum.ZipDo.html#variant.Early
+#[macro_export]
+macro_rules! early {
+    {$e:expr} => {$crate::ZipDo::Early($e)};
+}
+
+/// Wraps its input in [`ZipDo::Subst`].
+///
+/// ```rust
+/// # use fast_expr_gen::{ZipDo, subst};
+/// let subst_1: ZipDo<u8, u32, u64> = subst!(7u32);
+/// let subst_2: ZipDo<u8, u32, u64> = ZipDo::Subst(7);
+/// assert_eq!(subst_1, subst_2)
+/// ```
+///
+/// [`ZipDo::Subst`]: ./enum.ZipDo.html#variant.Subst
+#[macro_export]
+macro_rules! subst {
+    {$e:expr} => {$crate::ZipDo::Subst($e)};
+}
+
+/// Wraps its input in [`ZipDo::Subst`].
+///
+/// ```rust
+/// # use fast_expr_gen::{ZipDo, subst};
+/// let subst_1: ZipDo<u8, u32, u64> = subst!(7u32);
+/// let subst_2: ZipDo<u8, u32, u64> = ZipDo::Subst(7);
+/// assert_eq!(subst_1, subst_2)
+/// ```
+///
+/// [`ZipDo::Subst`]: ./enum.ZipDo.html#variant.Subst
+#[macro_export]
+macro_rules! replace {
+    {$e:expr} => {$crate::ZipDo::Subst($e)};
 }
 
 /// Internal types: not dangerous, but not meant for users.

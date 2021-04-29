@@ -695,29 +695,35 @@ impl ZipperTrait {
 
 impl ZipperTrait {
     pub fn to_tokens(&self, cxt: &cxt::ZipCxt, is_own: IsOwn) -> TokenStream {
-        let id = &self.id;
-        let generics = self.generics(is_own);
-        let (params, _, where_clause) = generics.split_for_impl();
-
-        let expr_tokens = cxt[self.e_idx]
-            .fp_e_deps()
-            .iter()
-            .cloned()
-            .map(|dep_e_idx| cxt[dep_e_idx].self_zip_trait_tokens(cxt, self.e_idx, is_own));
+        let trait_tokens = self.to_trait_tokens(cxt, is_own);
 
         let doc = doc::zipper_trait::doc(cxt, self.e_idx);
 
         let ref_mut_auto_impl = self.ref_mut_auto_impl_tokens(cxt, is_own);
 
-        // let macro_def = self.macro_def(cxt, is_own);
+        let macro_def = self.macro_def(cxt, is_own);
 
         quote! {
             #doc
+            #trait_tokens
+            #ref_mut_auto_impl
+            #macro_def
+        }
+    }
+
+    pub fn to_trait_tokens(&self, cxt: &cxt::ZipCxt, is_own: IsOwn) -> TokenStream {
+        let id = &self.id;
+        let generics = self.generics(is_own);
+        let (params, _, where_clause) = generics.split_for_impl();
+        let expr_tokens = cxt[self.e_idx]
+            .fp_e_deps()
+            .iter()
+            .cloned()
+            .map(|dep_e_idx| cxt[dep_e_idx].self_zip_trait_tokens(cxt, self.e_idx, is_own));
+        quote! {
             pub trait #id #params #where_clause {
                 #(#expr_tokens)*
             }
-            #ref_mut_auto_impl
-            // #macro_def
         }
     }
 
@@ -780,150 +786,167 @@ impl ZipperTrait {
         }
     }
 
-    // pub fn macro_def(&self, cxt: &cxt::ZipCxt, is_own: IsOwn) -> TokenStream {
-    //     let macro_id = if let Some(id) = cxt[self.e_idx].e_conf().impl_macro_name(is_own).deref() {
-    //         id
-    //     } else {
-    //         return quote! {};
-    //     };
+    pub fn macro_def(&self, cxt: &cxt::ZipCxt, is_own: IsOwn) -> TokenStream {
+        let macro_id = if let Some(id) = cxt[self.e_idx].e_conf().impl_macro_name(is_own).deref() {
+            id
+        } else {
+            return quote! {};
+        };
 
-    //     let (lft_side, rgt_side): (Vec<_>, Vec<_>) =
-    //         cxt[self.e_idx]
-    //             .fp_e_deps()
-    //             .iter()
-    //             .cloned()
-    //             .map(|dep_e_idx| {
-    //                 let e_cxt = &cxt[dep_e_idx];
-    //                 let e_id = e_cxt.e_id();
-    //                 let e_res = e_cxt.res_typ_id();
+        let proc_macro_path = cxt.lib_gen().impl_proc_macro_id();
+        let trait_def = self.to_trait_tokens(cxt, is_own);
 
-    //                 let t_params = e_cxt.generics().params.iter().enumerate().map(
-    //                     |(index, param)| match param {
-    //                         rust::GenericParam::Type(_) => (
-    //                             rust::Id::new(&format!("t_param_{}", index), gen::span()),
-    //                             false,
-    //                         ),
-    //                         rust::GenericParam::Lifetime(_) => (
-    //                             rust::Id::new(&format!("t_param_{}", index), gen::span()),
-    //                             true,
-    //                         ),
-    //                         rust::GenericParam::Const(_) => {
-    //                             panic!("unexpected const type parameter in `{}`", e_id)
-    //                         }
-    //                     },
-    //                 );
+        let res = quote! {
+            macro_rules! #macro_id {
+                { $($stuff:tt)* } => {
+                    #proc_macro_path! {
+                        #trait_def
 
-    //                 let e_binding = if e_cxt.generics().params.is_empty() {
-    //                     quote!(#e_id)
-    //                 } else {
-    //                     let lft_t_params = t_params.clone().map(|(name, is_lt)| {
-    //                         if is_lt {
-    //                             quote! { $#name:lifetime }
-    //                         } else {
-    //                             quote! { $#name:ty }
-    //                         }
-    //                     });
-    //                     quote!(#e_id< #(#lft_t_params)* >)
-    //                 };
+                        $($stuff)*
+                    }
+                }
+            }
+        };
 
-    //                 let e_typ = {
-    //                     let t_params = t_params.clone().map(|(id, _)| id);
-    //                     quote!(#e_id < #($#t_params),* >)
-    //                 };
+        res
 
-    //                 let inspect_expr_param =
-    //                     rust::Id::new(&format!("{}_expr_param", e_id), gen::span());
-    //                 let inspect_def = gen::ZipIds::inspect_fun(e_id);
-    //                 let inspect_sig = e_cxt.fun_inspect_self_sig_tokens(
-    //                     cxt,
-    //                     is_own,
-    //                     &quote!($#inspect_expr_param),
-    //                     Some(e_typ),
-    //                 );
+        // let (lft_side, rgt_side): (Vec<_>, Vec<_>) =
+        //     cxt[self.e_idx]
+        //         .fp_e_deps()
+        //         .iter()
+        //         .cloned()
+        //         .map(|dep_e_idx| {
+        //             let e_cxt = &cxt[dep_e_idx];
+        //             let e_id = e_cxt.e_id();
+        //             let e_res = e_cxt.res_typ_id();
 
-    //                 let (variants_lft, variants_rgt): (Vec<_>, Vec<_>) = e_cxt
-    //                     .expr()
-    //                     .variants()
-    //                     .iter()
-    //                     .map(|variant| {
-    //                         let v_id = variant.v_id();
-    //                         let fields = variant.data().iter().map(|data| {
-    //                             rust::Id::new(
-    //                                 &format!("{}_{}_{}", e_id, v_id, data.param_id()),
-    //                                 gen::span(),
-    //                             )
-    //                         });
+        //             let t_params = e_cxt.generics().params.iter().enumerate().map(
+        //                 |(index, param)| match param {
+        //                     rust::GenericParam::Type(_) => (
+        //                         rust::Id::new(&format!("t_param_{}", index), gen::span()),
+        //                         false,
+        //                     ),
+        //                     rust::GenericParam::Lifetime(_) => (
+        //                         rust::Id::new(&format!("t_param_{}", index), gen::span()),
+        //                         true,
+        //                     ),
+        //                     rust::GenericParam::Const(_) => {
+        //                         panic!("unexpected const type parameter in `{}`", e_id)
+        //                     }
+        //                 },
+        //             );
 
-    //                         let lft_binding = match variant.is_struct_like() {
-    //                             Some(true) => quote! {
-    //                                 #v_id { #($#fields:pat),* $(,)? }
-    //                             },
-    //                             Some(false) => quote! {
-    //                                 #v_id ( #($#fields:pat),* $(,)? )
-    //                             },
-    //                             None => quote! { #v_id },
-    //                         };
+        //             let e_binding = if e_cxt.generics().params.is_empty() {
+        //                 quote!(#e_id)
+        //             } else {
+        //                 let lft_t_params = t_params.clone().map(|(name, is_lt)| {
+        //                     if is_lt {
+        //                         quote! { $#name:lifetime }
+        //                     } else {
+        //                         quote! { $#name:ty }
+        //                     }
+        //                 });
+        //                 quote!(#e_id< #(#lft_t_params)* >)
+        //             };
 
-    //                         let handler =
-    //                             &self.variant_handlers.get(&dep_e_idx).unwrap()[variant.v_idx()];
-    //                         let def_id = &handler.go_up_id;
+        //             let e_typ = {
+        //                 let t_params = t_params.clone().map(|(id, _)| id);
+        //                 quote!(#e_id < #($#t_params),* >)
+        //             };
 
-    //                         (
-    //                             quote! {
-    //                                 #lft_binding => {
-    //                                     go_up: $#def_id:expr $(,)?
-    //                                 }
-    //                             },
-    //                             quote! {},
-    //                         )
-    //                     })
-    //                     .unzip();
+        //             let inspect_expr_param =
+        //                 rust::Id::new(&format!("{}_expr_param", e_id), gen::span());
+        //             let inspect_def = gen::ZipIds::inspect_fun(e_id);
+        //             let inspect_sig = e_cxt.fun_inspect_self_sig_tokens(
+        //                 cxt,
+        //                 is_own,
+        //                 &quote!($#inspect_expr_param),
+        //                 Some(e_typ),
+        //             );
 
-    //                 (
-    //                     quote! {
-    //                         #e_binding where Res = $#e_res:ty {
-    //                             variants: |&mut self| {
-    //                                 #(#variants_lft $(,)?)*
-    //                             }
+        //             let (variants_lft, variants_rgt): (Vec<_>, Vec<_>) = e_cxt
+        //                 .expr()
+        //                 .variants()
+        //                 .iter()
+        //                 .map(|variant| {
+        //                     let v_id = variant.v_id();
+        //                     let fields = variant.data().iter().map(|data| {
+        //                         rust::Id::new(
+        //                             &format!("{}_{}_{}", e_id, v_id, data.param_id()),
+        //                             gen::span(),
+        //                         )
+        //                     });
 
-    //                             $(
-    //                                 ,
-    //                                 inspect: |&mut self, $#inspect_expr_param:pat $(,)?|
-    //                                 $#inspect_def:expr
-    //                                 $(,)?
-    //                             )?
-    //                         }
-    //                     },
-    //                     quote! {
-    //                         type #e_res = $#e_res;
+        //                     let lft_binding = match variant.is_struct_like() {
+        //                         Some(true) => quote! {
+        //                             #v_id { #($#fields:pat),* $(,)? }
+        //                         },
+        //                         Some(false) => quote! {
+        //                             #v_id ( #($#fields:pat),* $(,)? )
+        //                         },
+        //                         None => quote! { #v_id },
+        //                     };
 
-    //                         #(#variants_rgt)*
+        //                     let handler =
+        //                         &self.variant_handlers.get(&dep_e_idx).unwrap()[variant.v_idx()];
+        //                     let def_id = &handler.go_up_id;
 
-    //                         $(
-    //                             #inspect_sig {
-    //                                 $#inspect_def
-    //                             }
-    //                         )?
-    //                     },
-    //                 )
-    //             })
-    //             .unzip();
+        //                     (
+        //                         quote! {
+        //                             #lft_binding => {
+        //                                 go_up: $#def_id:expr $(,)?
+        //                             }
+        //                         },
+        //                         quote! {},
+        //                     )
+        //                 })
+        //                 .unzip();
 
-    //     let error_msg =
-    //         format!("you are not using this macro correctly, please refer to its documentation");
+        //             (
+        //                 quote! {
+        //                     #e_binding where Res = $#e_res:ty {
+        //                         variants: |&mut self| {
+        //                             #(#variants_lft $(,)?)*
+        //                         }
 
-    //     quote_spanned! { macro_id.span() =>
-    //         #[macro_export]
-    //         macro_rules! #macro_id {
-    //             (
-    //                 #(#lft_side)*
-    //             ) => {
-    //                 #(#rgt_side)*
-    //             };
-    //             ($($stuff:tt)*) => {
-    //                 compile_error! { #error_msg }
-    //             };
-    //         }
-    //     }
-    // }
+        //                         $(
+        //                             ,
+        //                             inspect: |&mut self, $#inspect_expr_param:pat $(,)?|
+        //                             $#inspect_def:expr
+        //                             $(,)?
+        //                         )?
+        //                     }
+        //                 },
+        //                 quote! {
+        //                     type #e_res = $#e_res;
+
+        //                     #(#variants_rgt)*
+
+        //                     $(
+        //                         #inspect_sig {
+        //                             $#inspect_def
+        //                         }
+        //                     )?
+        //                 },
+        //             )
+        //         })
+        //         .unzip();
+
+        // let error_msg =
+        //     format!("you are not using this macro correctly, please refer to its documentation");
+
+        // quote_spanned! { macro_id.span() =>
+        //     #[macro_export]
+        //     macro_rules! #macro_id {
+        //         (
+        //             #(#lft_side)*
+        //         ) => {
+        //             #(#rgt_side)*
+        //         };
+        //         ($($stuff:tt)*) => {
+        //             compile_error! { #error_msg }
+        //         };
+        //     }
+        // }
+    }
 }

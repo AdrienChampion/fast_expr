@@ -28,6 +28,7 @@ pub mod examples;
 pub mod examples {}
 
 pub use fast_expr_proc::fast_expr;
+pub use fast_expr_proc_impl::fast_expr_impl;
 
 pub use fast_expr_gen::{CollDer, ZipDo, ZipUp};
 

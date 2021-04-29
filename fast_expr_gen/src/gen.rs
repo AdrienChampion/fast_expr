@@ -167,6 +167,9 @@ pub mod macr {
         let own = if is_own { "own" } else { "ref" };
         Id::new(&format!("impl_{}_{}_{}", e_id, suff, own), span())
     }
+    pub fn zip_spec_impl_proc() -> Id {
+        Id::new("fast_expr_impl", span())
+    }
 }
 
 pub mod field {
@@ -293,6 +296,14 @@ impl Lib {
         let coll_der = Self::coll_der_id();
         quote! {
             #path :: #coll_der :: new ( #acc, #iter )
+        }
+    }
+
+    pub fn impl_proc_macro_id(&self) -> TokenStream {
+        let path = &self.path;
+        let id = macr::zip_spec_impl_proc();
+        quote! {
+            #path :: #id
         }
     }
 
