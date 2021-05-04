@@ -48,6 +48,10 @@ impl Variant {
     pub fn is_leaf(&self) -> bool {
         self.data.iter().all(expr::data::Data::is_leaf)
     }
+
+    pub fn colls<'a>(&'a self) -> impl Iterator<Item = idx::Coll> + 'a {
+        self.data.iter().filter_map(|data| data.c_idx())
+    }
 }
 
 impl Variant {

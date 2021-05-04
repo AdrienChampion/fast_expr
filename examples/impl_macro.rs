@@ -44,6 +44,7 @@ impl_macro! {
         Cst(cst) => up!(Some(cst)),
         Var(var) => up!(self.model.get(var).to_owned()),
         App { op, args } => zip {
+            go_up => up!(args.and_then(|inner| inner)),
             fold(args => Option<Option<Cst>>) {
                 init => down!(None),
                 step(acc, next) => match (op, acc, next) {
@@ -69,7 +70,6 @@ impl_macro! {
                     | (Op::Conj, Some(_), None) => proceed!(None),
                 },
             },
-            go_up => up!(args.and_then(|inner| inner)),
         }
     }
 }

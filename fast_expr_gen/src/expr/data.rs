@@ -382,6 +382,14 @@ impl DataTyp {
         }
     }
 
+    pub fn c_idx(&self) -> Option<idx::Coll> {
+        match self {
+            Self::Leaf(_) => None,
+            Self::One(_) => None,
+            Self::Many(many) => Some(many.c_idx()),
+        }
+    }
+
     pub fn is_self_rec(&self) -> bool {
         match self {
             Self::Leaf(_) => false,

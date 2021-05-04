@@ -10,7 +10,7 @@ pub use proc_macro2::Span;
 pub use syn::{
     token, Attribute, Expr, Field, GenericArgument as GenericArg, GenericParam, Generics,
     Ident as Id, ItemEnum as Enum, ItemFn as Fn, ItemTrait as Trait, Lifetime, Lit, Pat, Path,
-    Type as Typ, TypeParam as TypParam, Variant, Visibility,
+    Token, Type as Typ, TypeParam as TypParam, Variant, Visibility,
 };
 
 /// A list of generic arguments.
