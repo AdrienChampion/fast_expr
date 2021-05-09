@@ -52,6 +52,11 @@ impl Variant {
     pub fn colls<'a>(&'a self) -> impl Iterator<Item = idx::Coll> + 'a {
         self.data.iter().filter_map(|data| data.c_idx())
     }
+    pub fn data_colls<'a>(&'a self) -> impl Iterator<Item = (idx::Data, idx::Coll)> + 'a {
+        self.data
+            .index_iter()
+            .filter_map(|(d_idx, data)| data.c_idx().map(|c| (d_idx, c)))
+    }
 }
 
 impl Variant {

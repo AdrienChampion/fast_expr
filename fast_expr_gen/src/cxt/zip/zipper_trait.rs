@@ -802,12 +802,22 @@ impl ZipperTrait {
             let mut expr_map = Vec::with_capacity(e_deps.len());
             let coll_handlers = e_cxt.coll_handlers();
             macro_rules! coll_of {
-                [$c_idx:expr] => {{
+                [$variant:expr, $d_idx:expr, $c_idx:expr $(,)?] => {{
+                    let id = match $variant.is_struct_like() {
+                        Some(true) => $variant[$d_idx].param_id().to_token_stream(),
+                        Some(false) => {
+                            let d_idx = $d_idx.get();
+                            quote! { #d_idx }
+                        },
+                        None => panic!(
+                            "attempting to extract collection information from an empty variant"
+                        )
+                    };
                     let coll_handler = &coll_handlers[$c_idx];
                     let acc_typ = coll_handler.assoc_acc_typ().to_token_stream();
                     let init_fn = coll_handler.initializer().id().to_token_stream();
                     let fold_fn = coll_handler.folder().id().to_token_stream();
-                    quote! {(#acc_typ, #init_fn, #fold_fn)}
+                    quote! {#id => { #acc_typ, #init_fn, #fold_fn }}
                 }};
             }
 
@@ -821,10 +831,25 @@ impl ZipperTrait {
 
                 for (v_idx, variant) in variants.index_iter() {
                     let variant_id = e_cxt.expr()[v_idx].v_id();
+                    let variant_desc = match variant.is_struct_like() {
+                        Some(true) => {
+                            let data_ids = variant.data().iter().map(|data| data.param_id());
+                            quote! {
+                                { #(#data_ids),* }
+                            }
+                        }
+                        Some(false) => {
+                            let len = variant.data().len();
+                            quote! { #len }
+                        }
+                        None => quote! { _ },
+                    };
                     let go_up_id = variant.zipper_go_up_id();
-                    let colls = variant.colls().map(|c_idx| coll_of!(c_idx));
+                    let colls = variant
+                        .data_colls()
+                        .map(|(d_idx, c_idx)| coll_of![variant, d_idx, c_idx]);
                     variant_map.push(quote! {
-                        #variant_id(#go_up_id #(, #colls)*)
+                        #variant_id(#variant_desc, #go_up_id #(, #colls)*)
                     });
                 }
 

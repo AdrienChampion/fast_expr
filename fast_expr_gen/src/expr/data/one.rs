@@ -2,33 +2,111 @@
 
 prelude! {}
 
-static BOX: StaticTypPath = static_typ_path! {
-    pref: &["std", "boxed"],
-    id: "Box",
-};
+pub mod kw {
+    pub mod start {
+        syn::custom_keyword!(wrap);
+        syn::custom_keyword!(one);
+    }
 
-#[allow(dead_code)]
-static OPTION: StaticTypPath = static_typ_path! {
-    pref: &["std", "option"],
-    id: "Option",
-};
+    syn::custom_keyword!(wrap_plain);
+    syn::custom_keyword!(wrap_box);
+    syn::custom_keyword!(wrap_ref);
+}
 
 #[derive(Debug, Clone)]
 pub enum Wrap {
     Plain,
-    Box(rust::Span),
+    Box(rust::Id),
     Ref {
         and_token: rust::token::And,
         lifetime: rust::Lifetime,
     },
     // Option(rust::Span),
 }
+// impl_parse_and_tokens! {
+//     for Wrap {
+//         fn parse(input) -> Res<Self> {
+//             Ok(parse! { input =>
+//                 @kw[kw::start::wrap] ::
+//                 @lookahead {
+//                     kw::wrap_plain => {
+//                         @kw[kw::wrap_plain]
+//                         => Self::Plain
+//                     }
+//                     kw::wrap_box => {
+//                         @kw[kw::wrap_box] (
+//                             box_id
+//                             => Self::Box(box_id)
+//                         )
+//                     }
+//                     kw::wrap_ref => {
+//                         @kw[kw::wrap_ref] (
+//                             and_token, lifetime
+//                             => Self::Ref { and_token, lifetime }
+//                         )
+//                     }
+//                 }
+//             })
+//         }
+//         // fn parse(input) -> Res<Self> {
+//         //     parse! { input =>
+//         //         @kw[kw::start::wrap] (
+//         //             => |content| {
+//         //                 let lookahead = input.lookahead1();
+//         //                 if lookahead.peek(kw::wrap_plain) {
+//         //                     input.parse::<kw::wrap_plain>()?;
+//         //                     Ok(Self::Plain)
+//         //                 } else if lookahead.peek(kw::wrap_box) {
+//         //                     parse! {
+//         //                         input => @kw[kw::wrap_box] (
+//         //                             box_id
+//         //                             => Ok(Self::Box(box_id))
+//         //                         )
+//         //                     }
+//         //                 } else if lookahead.peek(kw::wrap_ref) {
+//         //                     parse! {
+//         //                         input => @kw[kw::wrap_ref] (
+//         //                             and_token, lifetime
+//         //                             => Ok(Self::Ref { and_token, lifetime })
+//         //                         )
+//         //                     }
+//         //                 } else {
+//         //                     bail!(lookahead.error())
+//         //                 }
+//         //             }
+//         //         )
+//         //     }
+//         // }
+//         fn to_tokens(&self, tokens) {
+//             let start = kw::start::wrap(default_span());
+//             quote!(#start::).to_tokens(tokens);
+//             match self {
+//                 Self::Plain => {
+//                     let kw = kw::wrap_plain(default_span());
+//                     kw.to_tokens(tokens)
+//                 }
+//                 Self::Box(id) => {
+//                     let kw = kw::wrap_box(default_span());
+//                     tokens.extend(quote! {
+//                         #kw(#id)
+//                     })
+//                 }
+//                 Self::Ref { and_token, lifetime } => {
+//                     let kw = kw::wrap_ref(default_span());
+//                     tokens.extend(quote! {
+//                         #kw(#and_token, #lifetime)
+//                     })
+//                 }
+//             }
+//         }
+//     }
+// }
 impl Wrap {
     pub const PREF: &'static str = "wrap";
 
     pub fn from_id(id: &rust::Id) -> Res<Self> {
-        if id == BOX.id {
-            Ok(Wrap::Box(id.span()))
+        if id == builtin::path::box_path().get_path().id {
+            Ok(Wrap::Box(id.clone()))
         // } else if id == OPTION.id {
         //     Ok(Wrap::Option(id.span()))
         } else {
@@ -39,7 +117,9 @@ impl Wrap {
     pub fn wrap(&self, inner: rust::Typ) -> rust::Typ {
         match self {
             Self::Plain => inner,
-            Self::Box(span) => BOX.to_typ(*span, Some(vec![rust::GenericArg::Type(inner)])),
+            Self::Box(id) => builtin::path::box_path()
+                .get_path()
+                .to_typ(id.span(), Some(vec![rust::GenericArg::Type(inner)])),
             // Self::Option(span) => OPTION.to_typ(*span, Some(vec![rust::GenericArg::Type(inner)])),
             Self::Ref {
                 and_token,

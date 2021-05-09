@@ -24,6 +24,14 @@ pub struct Data {
     param_id: rust::Id,
 }
 
+// impl Parse for Data {
+//     fn parse(input: ParseStream) -> Res<Self> {
+//         let e_idx: usize = input.parse();
+//         let v_idx: usize = input.parse();
+//         let d_idx: usize = input.parse();
+//     }
+// }
+
 impl Data {
     pub fn from_front(
         cxt: &mut cxt::PreCxt,

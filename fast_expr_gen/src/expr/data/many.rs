@@ -4,18 +4,18 @@ prelude! {}
 
 #[derive(Debug, Clone)]
 struct CollSpec {
-    pub typ: StaticTypPath,
-    pub ref_iter: StaticTypPath,
-    pub own_iter: StaticTypPath,
+    pub typ: idx::TypPath,
+    pub ref_iter: idx::TypPath,
+    pub own_iter: idx::TypPath,
 }
 impl CollSpec {
     pub fn typ_id(&self) -> StaticTypId {
-        self.typ.id
+        self.typ.get_path().id
     }
-    pub fn typ(&self) -> StaticTypPath {
+    pub fn typ(&self) -> idx::TypPath {
         self.typ
     }
-    pub fn iter(&self, is_own: IsOwn) -> StaticTypPath {
+    pub fn iter(&self, is_own: IsOwn) -> idx::TypPath {
         if is_own {
             self.own_iter
         } else {
@@ -25,7 +25,9 @@ impl CollSpec {
 
     pub fn iter_on(&self, is_own: IsOwn, typ: &rust::Typ) -> rust::Typ {
         let arg = syn::parse_quote!(Item = #typ);
-        self.iter(is_own).to_typ(gen::span(), Some(vec![arg]))
+        self.iter(is_own)
+            .get_path()
+            .to_typ(gen::span(), Some(vec![arg]))
     }
 
     pub fn iter_fun(&self, is_own: IsOwn) -> rust::Id {
@@ -39,37 +41,28 @@ impl CollSpec {
 
 macro_rules! coll_spec {
     (
-        $($field:ident : ($pref:expr, $id:expr)),* $(,)?
+        $($field:ident : $val:expr),* $(,)?
     ) => {
         CollSpec {
-            $($field: static_typ_path! {
-                pref: $pref,
-                id: $id,
-            }),*
+            $($field: $val),*
         }
     };
 }
 
-static COLL_PATH: [&'static str; 2] = ["std", "collection"];
-static BTREE_SET_PATH: [&'static str; 3] = [COLL_PATH[0], COLL_PATH[1], "btree_set"];
-static HASH_SET_PATH: [&'static str; 3] = [COLL_PATH[0], COLL_PATH[1], "hash_set"];
-static VEC_PATH: [&'static str; 2] = ["std", "vec"];
-static SLICE_PATH: [&'static str; 2] = ["std", "slice"];
-
 static VEC: CollSpec = coll_spec! {
-    typ: (&VEC_PATH, "Vec"),
-    ref_iter: (&SLICE_PATH, "Iter"),
-    own_iter: (&VEC_PATH, "IntoIter"),
+    typ: builtin::path::vec_path(),
+    ref_iter: builtin::path::vec_ref_iter_path(),
+    own_iter: builtin::path::vec_own_iter_path(),
 };
 static HASH_SET: CollSpec = coll_spec! {
-    typ: (&COLL_PATH, "HashSet"),
-    ref_iter: (&HASH_SET_PATH, "Iter"),
-    own_iter: (&COLL_PATH, "IntoIter"),
+    typ: builtin::path::hash_set_path(),
+    ref_iter: builtin::path::hash_set_ref_iter_path(),
+    own_iter: builtin::path::hash_set_own_iter_path(),
 };
 static BTREE_SET: CollSpec = coll_spec! {
-    typ: (&COLL_PATH, "BTreeSet"),
-    ref_iter: (&BTREE_SET_PATH, "Iter"),
-    own_iter: (&BTREE_SET_PATH, "IntoIter"),
+    typ: builtin::path::btree_set_path(),
+    ref_iter: builtin::path::btree_set_ref_iter_path(),
+    own_iter: builtin::path::btree_set_own_iter_path(),
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -103,6 +96,7 @@ impl Coll {
     pub fn wrap(self, coll_span: rust::Span, inner: rust::Typ) -> rust::Typ {
         self.spec()
             .typ()
+            .get_path()
             .to_typ(coll_span, Some(vec![rust::GenericArg::Type(inner)]))
     }
 }
@@ -202,6 +196,7 @@ impl Many {
 
         let iter = spec
             .iter(is_own)
+            .get_path()
             .to_typ(rust::Span::mixed_site(), Some(args));
         let typ_tokens = cxt.lib_gen().coll_der_instantiate(acc, &iter);
         Some(syn::parse_quote!(#typ_tokens))

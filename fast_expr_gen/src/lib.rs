@@ -1,5 +1,6 @@
 //! Code generation crate for fast-expr.
 
+pub extern crate proc_macro2;
 pub extern crate quote;
 pub extern crate syn;
 

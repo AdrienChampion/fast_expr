@@ -30,7 +30,7 @@ pub mod examples {}
 pub use fast_expr_proc::fast_expr;
 pub use fast_expr_proc_impl::fast_expr_impl;
 
-pub use fast_expr_gen::{CollDer, ZipDo, ZipUp};
+pub use fast_expr_gen::{down, early, proceed, subst, up, CollDer, ZipDo, ZipUp};
 
 /// Internal types: not dangerous, but not meant for users.
 pub mod internal {

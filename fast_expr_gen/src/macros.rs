@@ -8,6 +8,100 @@ macro_rules! prelude {
     };
 }
 
+#[macro_export]
+macro_rules! parse {
+    {$input:expr => , $($tail:tt)*} => {{
+        let _: $crate::syn::Token![,] = $input.parse()?;
+        parse!($input => $($tail)*)
+    }};
+    {$input:expr => :: $($tail:tt)*} => {{
+        let _: $crate::syn::Token![::] = $input.parse()?;
+        parse!($input => $($tail)*)
+    }};
+    {$input:expr => $id:ident $($tail:tt)*} => {{
+        let $id = $input.parse()?;
+        parse!($input => $($tail)*)
+    }};
+    {$input:expr => ($($inner:tt)*)} => {{
+        let paren_content;
+        let _brace = syn::parenthesized!(paren_content in $input);
+        parse!(paren_content => $($inner)*)
+    }};
+    {$input:expr => {$($inner:tt)*}} => {{
+        let brace_content;
+        let _brace = syn::braced!(brace_content in $input);
+        parse!(brace_content => $($inner)*)
+    }};
+    {$input:expr => ($($inner:tt)*) $($tail:tt)*} => {{
+        let paren_content;
+        let _brace = syn::parenthesized!(paren_content in $input);
+        parse!(paren_content => $($inner)* => parse!($input => $($tail)*))
+    }};
+    {$input:expr => {$($inner:tt)*} $($tail:tt)*} => {{
+        let brace_content;
+        let _brace = syn::braced!(brace_content in $input);
+        parse!(brace_content => $($inner)* => parse!($input => $($tail)*))
+    }};
+    {$input:expr => @kw[$($kw:tt)*] $($tail:tt)*} => {{
+        $input.parse::<$($kw)*>()?;
+        parse!($input => $($tail)*)
+    }};
+    {$input:expr => @lookahead {
+        $( $e:expr => { $($inner:tt)* } )*
+    }} => {{
+        let lookahead = $input.lookahead1();
+        $(
+            if lookahead.peek($e) {
+                parse!($input => $($inner)*)
+            } else
+        )* {
+            bail!(lookahead.error())
+        }
+    }};
+    {$input:expr => => |$input_pat:pat| $body:expr} => {{
+        let $input_pat = $input;
+        $body
+    }};
+    {$input:expr => => $body:expr} => {{
+        $body
+    }};
+    {$input:expr =>} => {};
+}
+
+#[macro_export]
+macro_rules! impl_parse_and_tokens {
+    {$(
+        for $( ($($t_params:tt)*) )? $ty:ty {
+            fn parse($input:pat) -> Res<Self> {
+                $($parse_def:tt)*
+            }
+            fn to_tokens(&$slf:ident, $tokens:pat) {
+                $($to_tokens_def:tt)*
+            }
+        }
+    )*} => {$(
+        impl $(<$($t_params)*>)? $crate::syn::parse::Parse for $ty {
+            fn parse($input: $crate::syn::parse::ParseStream) -> $crate::Res<Self> {
+                $($parse_def)*
+            }
+        }
+        impl $(<$($t_params)*>)? $crate::quote::ToTokens for $ty {
+            fn to_tokens(&$slf, $tokens: &mut $crate::proc_macro2::TokenStream) {
+                $($to_tokens_def)*
+            }
+        }
+    )*};
+}
+
+#[macro_export]
+macro_rules! braced {
+    {$input:expr} => {{
+        let content;
+        let brace = $crate::syn::braced!(content in $input);
+        (brace, content)
+    }};
+}
+
 /// Builds an error.
 #[macro_export]
 macro_rules! error {
@@ -29,6 +123,10 @@ macro_rules! error {
         )*
         err
     }};
+
+    ($err:expr) => {
+        $err
+    };
 }
 /// Returns an error.
 #[macro_export]

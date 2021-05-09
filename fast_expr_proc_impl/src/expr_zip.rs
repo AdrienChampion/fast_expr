@@ -115,21 +115,27 @@ impl Parse for ExprZip {
 }
 
 pub struct FullVariantZip {
-    pub v_id: Option<rust::Id>,
+    pub v_id: rust::Id,
     pub bindings: Bindings,
     pub fat_arrow: syn::Token![=>],
     pub zip: VariantZip,
 }
 impl FullVariantZip {
-    pub fn v_id(&self) -> Option<&rust::Id> {
-        self.v_id.as_ref()
+    pub fn v_id(&self) -> &rust::Id {
+        &self.v_id
     }
-    pub fn bindings_do<T>(
-        &self,
-        struct_like_do: impl FnOnce(&Punctuated<syn::FieldPat, rust::Token![,]>) -> Res<T>,
-        tuple_like_do: impl FnOnce(&Punctuated<syn::Pat, rust::Token![,]>) -> Res<T>,
+    pub fn bindings_do<'a, T>(
+        &'a self,
+        struct_like_do: impl FnOnce(&'a Punctuated<syn::FieldPat, rust::Token![,]>) -> Res<T>,
+        tuple_like_do: impl FnOnce(&'a Punctuated<syn::Pat, rust::Token![,]>) -> Res<T>,
     ) -> Res<T> {
         self.bindings.bindings_do(struct_like_do, tuple_like_do)
+    }
+    pub fn go_up_def(&self) -> (Option<&Vec<syn::Attribute>>, &rust::Expr) {
+        self.zip.go_up_def()
+    }
+    pub fn get_multi(&self) -> Option<&Multi> {
+        self.zip.get_multi()
     }
 }
 impl Parse for FullVariantZip {
@@ -137,7 +143,7 @@ impl Parse for FullVariantZip {
         let bindings: Bindings = input.parse()?;
         let fat_arrow = input.parse()?;
         let zip = input.parse()?;
-        let v_id = bindings.v_id()?.cloned();
+        let v_id = bindings.v_id()?.clone();
         Ok(Self {
             v_id,
             bindings,
@@ -153,7 +159,7 @@ pub enum Bindings {
     Wild(PatWild),
 }
 impl Bindings {
-    pub fn v_id(&self) -> Res<Option<&rust::Id>> {
+    pub fn v_id(&self) -> Res<&rust::Id> {
         let path = match self {
             Self::Struct(pat) => &pat.path,
             Self::Tuple(pat) => &pat.path,
@@ -165,13 +171,52 @@ impl Bindings {
             }
         };
         path.get_ident()
-            .map(Some)
             .ok_or_else(|| syn::Error::new_spanned(path, "expected variant identifier"))
     }
-    pub fn bindings_do<T>(
-        &self,
-        struct_like_do: impl FnOnce(&Punctuated<syn::FieldPat, rust::Token![,]>) -> Res<T>,
-        tuple_like_do: impl FnOnce(&Punctuated<syn::Pat, rust::Token![,]>) -> Res<T>,
+
+    // pub get_id_from(&self, id: crate::expr_map::CollData) -> Res<&rust::Id> {
+    //     use crate::expr_map::CollData;
+    //     match (self, id) {
+    //         (self::Struct(pat), CollData::Field(id)) => {
+    //             let mut res = None;
+    //             for field in &pat.fields {
+    //                 if field.colon_token.is_some() {
+    //                     bail!(syn::Error::new_spanned(field.pat, "unexpected pattern"))
+    //                 }
+    //                 match &field.member {
+    //                     syn::Member::Named(pat_id) => if id == pat_id {
+    //                         Ok(pat_id)
+    //                     } else {
+    //                         continue;
+    //                     },
+    //                     syn::Member::Unnamed(_) => bail!(
+    //                         syn::Error::new_spanned(field.member, "unexpected unnamed pattern")
+    //                     ),
+    //                 }
+    //             }
+    //             res.ok_or_else(syn::Error::new_spanned(id), "unknown identifier")
+    //         }
+    //         (Self::Tuple(pat), CollData::Idx(idx)) => {
+    //             let mut idx = idx.base10_parse()?;
+    //             for pat in &pat.pat.elems {
+    //                 if idx == 0 {
+    //                     match pat {
+    //                         syn::Pat::Ident(id) => return Ok(id),
+    //                         pat => bail!(syn::Error::new_spanned(pat, "unexpected pattern")),
+    //                     }
+    //                 } else {
+    //                     continue;
+    //                 }
+    //             }
+
+    //         }
+    //     }
+    // }
+
+    pub fn bindings_do<'a, T>(
+        &'a self,
+        struct_like_do: impl FnOnce(&'a Punctuated<syn::FieldPat, rust::Token![,]>) -> Res<T>,
+        tuple_like_do: impl FnOnce(&'a Punctuated<syn::Pat, rust::Token![,]>) -> Res<T>,
     ) -> Res<T> {
         match self {
             Self::Struct(pat) => struct_like_do(&pat.fields),
@@ -213,6 +258,20 @@ pub enum VariantZip {
     Single(GoUpDef),
     Multi(Multi),
 }
+impl VariantZip {
+    pub fn go_up_def(&self) -> (Option<&Vec<syn::Attribute>>, &rust::Expr) {
+        match self {
+            Self::Single(go_up) => (None, &go_up.expr),
+            Self::Multi(multi) => multi.go_up_def(),
+        }
+    }
+    pub fn get_multi(&self) -> Option<&Multi> {
+        match self {
+            Self::Single(_) => None,
+            Self::Multi(multi) => Some(multi),
+        }
+    }
+}
 impl Parse for VariantZip {
     fn parse(input: ParseStream) -> Res<Self> {
         let span = input.span();
@@ -247,6 +306,12 @@ pub struct Multi {
 impl Multi {
     pub fn peek(lookahead: &syn::parse::Lookahead1) -> bool {
         lookahead.peek(keyword::zip)
+    }
+    pub fn go_up_def(&self) -> (Option<&Vec<syn::Attribute>>, &rust::Expr) {
+        (Some(&self.go_up.attrs), self.go_up.def())
+    }
+    pub fn folds(&self) -> &[Fold] {
+        &self.folds
     }
 }
 impl Parse for Multi {
@@ -293,12 +358,17 @@ pub enum GoUpOrFold {
 }
 impl Parse for GoUpOrFold {
     fn parse(input: ParseStream) -> Res<Self> {
+        let attrs = syn::Attribute::parse_outer(input)?;
         let lookahead = input.lookahead1();
 
         if lookahead.peek(keyword::go_up) {
-            Ok(Self::GoUp(input.parse()?))
+            let mut go_up = GoUp::parse(input)?;
+            go_up.attrs = attrs;
+            Ok(Self::GoUp(go_up))
         } else if lookahead.peek(keyword::fold) {
-            Ok(Self::Fold(input.parse()?))
+            let mut fold = Fold::parse(input)?;
+            fold.attrs = attrs;
+            Ok(Self::Fold(fold))
         } else {
             Err(lookahead.error())
         }
@@ -306,13 +376,20 @@ impl Parse for GoUpOrFold {
 }
 
 pub struct GoUp {
+    pub attrs: Vec<syn::Attribute>,
     pub key: keyword::go_up,
     pub fat_arrow: syn::Token![=>],
     pub def: GoUpDef,
 }
+impl GoUp {
+    pub fn def(&self) -> &rust::Expr {
+        &self.def.expr
+    }
+}
 impl Parse for GoUp {
     fn parse(input: ParseStream) -> Res<Self> {
         Ok(Self {
+            attrs: vec![],
             key: input.parse()?,
             fat_arrow: input.parse()?,
             def: input.parse()?,
@@ -332,6 +409,7 @@ impl Parse for GoUpDef {
 }
 
 pub struct Fold {
+    pub attrs: Vec<syn::Attribute>,
     pub key: keyword::fold,
     pub paren: syn::token::Paren,
     pub field: rust::Id,
@@ -367,6 +445,7 @@ impl Parse for Fold {
         }
 
         Ok(Self {
+            attrs: vec![],
             key,
             paren,
             field,
@@ -379,13 +458,20 @@ impl Parse for Fold {
 }
 
 pub struct Init {
+    pub attrs: Vec<syn::Attribute>,
     pub key: keyword::init,
     pub fat_arrow: syn::Token![=>],
     pub expr: rust::Expr,
 }
 impl Parse for Init {
     fn parse(input: ParseStream) -> Res<Self> {
+        let attrs = if !input.peek(keyword::init) {
+            syn::Attribute::parse_outer(input)?
+        } else {
+            vec![]
+        };
         Ok(Self {
+            attrs,
             key: input.parse()?,
             fat_arrow: input.parse()?,
             expr: input.parse()?,
@@ -394,6 +480,7 @@ impl Parse for Init {
 }
 
 pub struct Step {
+    pub attrs: Vec<syn::Attribute>,
     pub key: keyword::step,
     pub paren: syn::token::Paren,
     pub acc_pat: syn::Pat,
@@ -403,6 +490,11 @@ pub struct Step {
 }
 impl Parse for Step {
     fn parse(input: ParseStream) -> Res<Self> {
+        let attrs = if !input.peek(keyword::step) {
+            syn::Attribute::parse_outer(input)?
+        } else {
+            vec![]
+        };
         let key = input.parse()?;
         let content;
         let paren = syn::parenthesized!(content in input);
@@ -432,6 +524,7 @@ impl Parse for Step {
         let expr = input.parse()?;
 
         Ok(Self {
+            attrs,
             key,
             paren,
             acc_pat,
