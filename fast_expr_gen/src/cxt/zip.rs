@@ -97,6 +97,7 @@ impl ECxt {
         let mut tokens = self.frame_enum_tokens(cxt, is_own);
         if *self.e_conf().zip_gen {
             tokens.extend(self.zip_trait_tokens(cxt, is_own));
+            tokens.extend(self.zip_trait_auto_impl_tokens(cxt, is_own));
             tokens.extend(self.zip_struct_tokens(cxt, is_own));
         }
         tokens
@@ -108,7 +109,11 @@ impl ECxt {
 
     /// Generates the tokens for the trait definition for this expression type.
     pub fn zip_trait_tokens(&self, cxt: &cxt::ZipCxt, is_own: IsOwn) -> TokenStream {
-        self.zipper_trait.to_tokens(cxt, is_own)
+        self.zipper_trait.to_trait_tokens(cxt, is_own)
+    }
+    /// Generates the tokens for the trait auto-implementation(s) for this expression type.
+    pub fn zip_trait_auto_impl_tokens(&self, cxt: &cxt::ZipCxt, is_own: IsOwn) -> TokenStream {
+        self.zipper_trait.to_auto_impl_tokens(cxt, is_own)
     }
 
     /// Generates the zipper trait items for this expression type.

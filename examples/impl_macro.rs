@@ -41,11 +41,11 @@ impl Evaluator {
 
 use fast_expr::{down, proceed, up};
 
-impl_macro! {
+zip! {
     impl<'fast_expr> zip_ref::ExprZipSpec<'fast_expr> for Evaluator {
         &mut self => {
 
-            zip(expr: &'fast_expr Expr => Option<Cst>) {
+            zip(expr: &Expr => Option<Cst>) {
                 Cst(cst) => up!(Some(*cst)),
 
                 Var(var) => up!(self.model.get(var).cloned()),

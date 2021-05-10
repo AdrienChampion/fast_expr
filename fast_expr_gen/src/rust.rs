@@ -140,7 +140,7 @@ implement! {
             |self| &self.id
         }
         Display {
-            |self, fmt| self.id.fmt(fmt)
+            |&self, fmt| self.id.fmt(fmt)
         }
     }
 
@@ -155,7 +155,7 @@ implement! {
             |self| &self.id
         }
         Display {
-            |self, fmt| self.id.fmt(fmt)
+            |&self, fmt| self.id.fmt(fmt)
         }
     }
 }

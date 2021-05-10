@@ -465,7 +465,7 @@ impl DataTyp {
 implement! {
     impl Data {
         Display {
-            |self, fmt| write!(
+            |&self, fmt| write!(
                 fmt,
                 "{}{}",
                 self.d_id().map(|id| format!("{}: ", id)).unwrap_or_else(String::new),

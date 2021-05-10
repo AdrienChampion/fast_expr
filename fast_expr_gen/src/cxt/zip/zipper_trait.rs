@@ -694,24 +694,12 @@ impl ZipperTrait {
 }
 
 impl ZipperTrait {
-    pub fn to_tokens(&self, cxt: &cxt::ZipCxt, is_own: IsOwn) -> TokenStream {
-        let trait_tokens = self.to_trait_tokens(cxt, is_own);
-
-        let doc = doc::zipper_trait::doc(cxt, self.e_idx);
-
-        let ref_mut_auto_impl = self.ref_mut_auto_impl_tokens(cxt, is_own);
-
-        let macro_def = self.macro_def(cxt, is_own);
-
-        quote! {
-            #doc
-            #trait_tokens
-            #ref_mut_auto_impl
-            #macro_def
-        }
+    pub fn to_auto_impl_tokens(&self, cxt: &cxt::ZipCxt, is_own: IsOwn) -> TokenStream {
+        self.ref_mut_auto_impl_tokens(cxt, is_own)
     }
 
     pub fn to_trait_tokens(&self, cxt: &cxt::ZipCxt, is_own: IsOwn) -> TokenStream {
+        let doc = doc::zipper_trait::doc(cxt, self.e_idx);
         let id = &self.id;
         let generics = self.generics(is_own);
         let (params, _, where_clause) = generics.split_for_impl();
@@ -721,6 +709,7 @@ impl ZipperTrait {
             .cloned()
             .map(|dep_e_idx| cxt[dep_e_idx].self_zip_trait_tokens(cxt, self.e_idx, is_own));
         quote! {
+            #doc
             pub trait #id #params #where_clause {
                 #(#expr_tokens)*
             }
@@ -784,98 +773,5 @@ impl ZipperTrait {
                 #(#expr_tokens)*
             }
         }
-    }
-
-    pub fn macro_def(&self, cxt: &cxt::ZipCxt, is_own: IsOwn) -> TokenStream {
-        let macro_id = if let Some(id) = cxt[self.e_idx].e_conf().impl_macro_name(is_own).deref() {
-            id
-        } else {
-            return quote! {};
-        };
-
-        let proc_macro_path = cxt.lib_gen().impl_proc_macro_id();
-        let trait_def = self.to_trait_tokens(cxt, is_own);
-
-        let expr_map = {
-            let e_cxt = &cxt[self.e_idx];
-            let e_deps = e_cxt.fp_e_deps();
-            let mut expr_map = Vec::with_capacity(e_deps.len());
-            let coll_handlers = e_cxt.coll_handlers();
-            macro_rules! coll_of {
-                [$variant:expr, $d_idx:expr, $c_idx:expr $(,)?] => {{
-                    let id = match $variant.is_struct_like() {
-                        Some(true) => $variant[$d_idx].param_id().to_token_stream(),
-                        Some(false) => {
-                            let d_idx = $d_idx.get();
-                            quote! { #d_idx }
-                        },
-                        None => panic!(
-                            "attempting to extract collection information from an empty variant"
-                        )
-                    };
-                    let coll_handler = &coll_handlers[$c_idx];
-                    let acc_typ = coll_handler.assoc_acc_typ().to_token_stream();
-                    let init_fn = coll_handler.initializer().id().to_token_stream();
-                    let fold_fn = coll_handler.folder().id().to_token_stream();
-                    quote! {#id => { #acc_typ, #init_fn, #fold_fn }}
-                }};
-            }
-
-            for e_idx in e_deps.iter().cloned() {
-                let e_cxt = &cxt[e_idx];
-                let e_id = e_cxt.e_id();
-                let e_res_typ = e_cxt.res_typ_id();
-                let variants = e_cxt.expr().variants();
-
-                let mut variant_map = Vec::with_capacity(variants.len());
-
-                for (v_idx, variant) in variants.index_iter() {
-                    let variant_id = e_cxt.expr()[v_idx].v_id();
-                    let variant_desc = match variant.is_struct_like() {
-                        Some(true) => {
-                            let data_ids = variant.data().iter().map(|data| data.param_id());
-                            quote! {
-                                { #(#data_ids),* }
-                            }
-                        }
-                        Some(false) => {
-                            let len = variant.data().len();
-                            quote! { #len }
-                        }
-                        None => quote! { _ },
-                    };
-                    let go_up_id = variant.zipper_go_up_id();
-                    let colls = variant
-                        .data_colls()
-                        .map(|(d_idx, c_idx)| coll_of![variant, d_idx, c_idx]);
-                    variant_map.push(quote! {
-                        #variant_id(#variant_desc, #go_up_id #(, #colls)*)
-                    });
-                }
-
-                let expr_tokens = quote! {
-                    #e_id(#e_res_typ, #(#variant_map),*)
-                };
-                expr_map.push(expr_tokens);
-            }
-
-            expr_map
-        };
-
-        let res = quote! {
-            macro_rules! #macro_id {
-                { $($stuff:tt)* } => {
-                    #proc_macro_path! {
-                        #trait_def
-                        map {
-                            #(#expr_map),*
-                        }
-                        $($stuff)*
-                    }
-                }
-            }
-        };
-
-        res
     }
 }

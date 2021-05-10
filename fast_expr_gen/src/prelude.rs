@@ -19,6 +19,8 @@ pub use quote::{quote, quote_spanned, ToTokens, TokenStreamExt};
 pub use smallvec::smallvec;
 pub use syn::{
     parse::{Parse, ParseStream},
+    punctuated::Punctuated,
+    spanned::Spanned,
     Error,
 };
 
@@ -29,6 +31,9 @@ pub use crate::{
     err::{self, Result as Res},
     expr, front, gen, log, logln, rust,
 };
+
+/// A `syn` comma-separated list of values.
+pub type Csv<Val> = Punctuated<Val, syn::Token![,]>;
 
 /// Used to indicate whether something was generated.
 pub type WasGenerated = bool;

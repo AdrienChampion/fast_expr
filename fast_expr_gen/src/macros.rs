@@ -111,6 +111,12 @@ macro_rules! error {
     (@($span:expr, $($msg:tt)*)) => {
         crate::err::Error::new($span, format_args!($($msg)*))
     };
+    (@ $span:expr => $($msg:tt)*) => {
+        crate::err::Error::new($span, format_args!($($msg)*))
+    };
+    (on $token:expr => $($msg:tt)*) => {
+        crate::err::Error::new_spanned($token, format_args!($($msg)*))
+    };
 
     ($unexpected:tt $def:tt) => {
         compile_error!(concat!("expected `for` or `@`, found `", stringify!($unexpected), "`"))
@@ -230,10 +236,86 @@ macro_rules! implement {
 
     (
         @impl($slf_ty:ty, $($t_params:tt)*)
+        Parse $(
+            where ( $($t_constraints:tt)* )
+        )? {
+            |$input:ident| $def:expr
+        }
+        $($tail:tt)*
+    ) => {
+        impl<$($t_params)*> $crate::prelude::Parse for $slf_ty
+        $(where $($t_constraints)*)? {
+            fn parse(
+                $input: $crate::prelude::ParseStream
+            ) -> $crate::prelude::Res<Self> {
+                $def
+            }
+        }
+
+        $crate::implement! {
+            @impl($slf_ty, $($t_params)*)
+            $($tail)*
+        }
+    };
+
+    (
+        @impl($slf_ty:ty, $($t_params:tt)*)
+        ToTokens $(
+            where ( $($t_constraints:tt)* )
+        )? {
+            |&$slf:ident, $tokens:ident| $def:expr
+        }
+        $($tail:tt)*
+    ) => {
+        impl<$($t_params)*> $crate::prelude::ToTokens for $slf_ty
+        $(where $($t_constraints)*)? {
+            fn to_tokens(&$slf, $tokens: &mut $crate::prelude::TokenStream) {
+                $def
+            }
+        }
+
+        $crate::implement! {
+            @impl($slf_ty, $($t_params)*)
+            $($tail)*
+        }
+    };
+
+    (
+        @impl($slf_ty:ty, $($t_params:tt)*)
+        ToTokens, Display $(
+            where ( $($t_constraints:tt)* )
+        )? {
+            |&$slf:ident, $tokens:ident| $def:expr
+        }
+        $($tail:tt)*
+    ) => {
+        $crate::implement! {
+            @impl($slf_ty, $($t_params)*)
+            ToTokens $(where ($($t_constraints)*))? {
+                |&$slf, $tokens| $def
+            }
+        }
+        $crate::implement! {
+            @impl($slf_ty, $($t_params)*)
+            Display $(where ($($t_constraints)*))? {
+                |&$slf, fmt| {
+                    use quote::ToTokens;
+                    $slf.to_token_stream().fmt(fmt)
+                }
+            }
+        }
+        $crate::implement! {
+            @impl($slf_ty, $($t_params)*)
+            $($tail)*
+        }
+    };
+
+    (
+        @impl($slf_ty:ty, $($t_params:tt)*)
         Display $(
             where ( $($t_constraints:tt)* )
         )? {
-            |$slf:ident, $fmt:ident| $def:expr
+            |&$slf:ident, $fmt:ident| $def:expr
         }
         $($tail:tt)*
     ) => {

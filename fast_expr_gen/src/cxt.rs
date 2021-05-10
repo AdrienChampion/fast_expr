@@ -561,13 +561,31 @@ impl ZipTop {
         self.to_zip_mod_tokens_for(stream, true);
         self.to_zip_mod_tokens_for(stream, false);
     }
+
+    pub fn to_impl_macro_tokens(&self, stream: &mut TokenStream) {
+        let proc_macro_path = self.cxt.lib_gen().impl_proc_macro_id();
+        let expr_map = crate::impl_macro::map::Exprs::new(&self.cxt);
+
+        let tokens = quote! {
+            macro_rules! zip {
+                { $($stuff:tt)* } => {
+                    #proc_macro_path! {
+                        $($stuff)*
+                        #expr_map
+                    }
+                }
+            }
+        };
+
+        stream.extend(tokens)
+    }
 }
 
 impl ToTokens for ZipTop {
     fn to_tokens(&self, stream: &mut TokenStream) {
         self.to_expr_enum_tokens(stream);
-
         self.to_zip_mods_tokens(stream);
+        self.to_impl_macro_tokens(stream);
     }
 }
 

@@ -15,6 +15,7 @@ pub mod err;
 pub mod expr;
 pub mod front;
 pub mod gen;
+pub mod impl_macro;
 pub mod prelude;
 pub mod rust;
 

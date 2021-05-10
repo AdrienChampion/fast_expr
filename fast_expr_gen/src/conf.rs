@@ -25,7 +25,7 @@ prelude! {}
 /// The span info is mostly there to produce better error messages.
 ///
 /// **NB**: this type `Deref`s to `T` for convenience.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct Val<T> {
     /// Actual value.
     val: T,
@@ -64,7 +64,8 @@ impl<T> Val<T> {
         }
     }
 
-    pub fn unwrap(self) -> T {
+    /// Accesses the actual value.
+    pub fn get(self) -> T {
         self.val
     }
 }
